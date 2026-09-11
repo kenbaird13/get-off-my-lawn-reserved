@@ -13,6 +13,7 @@ import draylar.goml.ui.GenericPlayerSelectionGui;
 import draylar.goml.ui.PagedGui;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
 import eu.pb4.sgui.api.gui.SimpleGui;
+import net.minecraft.tags.BlockTags;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.jetbrains.annotations.Nullable;
 
@@ -92,7 +93,7 @@ public class ForceFieldAugmentBlock extends ClaimAugmentBlock {
                 y = player.level().getHeight(Heightmap.Types.MOTION_BLOCKING, (int) pos.x, (int) pos.z);
             }
 
-            player.randomTeleport(pos.x, y, pos.z, true);
+            player.randomTeleport(pos.x, y, pos.z, true, BlockTags.DANGEROUS_FOR_TELEPORTATION);
 
             player.setDeltaMovement(Vec3.atLowerCornerOf(dir.getUnitVec3i()).scale(0.2));
 

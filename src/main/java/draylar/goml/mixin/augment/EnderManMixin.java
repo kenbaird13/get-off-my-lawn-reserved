@@ -4,7 +4,7 @@ import draylar.goml.api.ClaimUtils;
 import draylar.goml.registry.GOMLBlocks;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Final;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(EnderMan.class)
+@Mixin(Enderman.class)
 public abstract class EnderManMixin extends Monster {
 
     private EnderManMixin(EntityType<? extends Monster> entityType, Level world) {
@@ -35,9 +35,9 @@ public abstract class EnderManMixin extends Monster {
         }
     }
 
-    @Mixin(targets = {"net/minecraft/world/entity/monster/EnderMan$EndermanLeaveBlockGoal"})
+    @Mixin(targets = {"net/minecraft/world/entity/monster/Enderman$EndermanLeaveBlockGoal"})
     public static abstract class EndermanLeaveBlockGoalMixin extends Goal {
-        @Shadow @Final private EnderMan enderman;
+        @Shadow @Final private Enderman enderman;
 
         @Inject(method = "canUse", at = @At("HEAD"), cancellable = true)
         private void goml$cancelInClaim(CallbackInfoReturnable<Boolean> cir) {
@@ -50,9 +50,9 @@ public abstract class EnderManMixin extends Monster {
         }
     }
 
-    @Mixin(targets = {"net/minecraft/world/entity/monster/EnderMan$EndermanTakeBlockGoal"})
+    @Mixin(targets = {"net/minecraft/world/entity/monster/Enderman$EndermanTakeBlockGoal"})
     public static abstract class EndermanTakeBlockGoalMixin extends Goal {
-        @Shadow @Final private EnderMan enderman;
+        @Shadow @Final private Enderman enderman;
 
         @Inject(method = "canUse", at = @At("HEAD"), cancellable = true)
         private void goml$cancelInClaim(CallbackInfoReturnable<Boolean> cir) {
