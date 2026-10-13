@@ -8,6 +8,9 @@
     "fabric-gametest": [
       "draylar.goml.MaintenanceTests",
       "draylar.goml.RecipeTests"
+    ],
+    "main": [
+      "draylar.goml.TestEnvironment"
     ]
   },
   "depends": {

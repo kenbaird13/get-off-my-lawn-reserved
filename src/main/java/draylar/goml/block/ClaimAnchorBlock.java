@@ -17,7 +17,12 @@ import java.util.Collections;
 import java.util.function.IntSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.ItemInteractionResult;
+import draylar.goml.ui.ClaimMaintenanceGui;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -109,9 +114,36 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
     }
 
     @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level world, BlockPos pos,
+                                             Player playerEntity, InteractionHand hand, BlockHitResult hit) {
+        if (playerEntity instanceof ServerPlayer player
+                && world.getBlockEntity(pos) instanceof ClaimAnchorBlockEntity anchor) {
+            var claim = anchor.getClaim();
+            if (claim != null && !claim.isProtectionActive() && stack.is(claim.maintenanceRule().item())) {
+                var error = claim.takeOver(player, hand);
+                if (error != null) {
+                    player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(error.copy().withStyle(ChatFormatting.RED)));
+                    // End this interaction so a rejected payment cannot place or otherwise use the held item.
+                    return ItemInteractionResult.CONSUME;
+                }
+                player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.maintenance.paid").withStyle(ChatFormatting.GREEN)));
+                new ClaimMaintenanceGui(player, claim);
+                return ItemInteractionResult.SUCCESS;
+            }
+        }
+        return super.useItemOn(stack, state, world, pos, playerEntity, hand, hit);
+    }
+
+    @Override
     protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player playerEntity, BlockHitResult hit) {
         if (playerEntity instanceof ServerPlayer player && !player.isShiftKeyDown() && !(player.getMainHandItem().getItem() instanceof UpgradeKitItem)) {
             var blockEntity = world.getBlockEntity(pos, GOMLEntities.CLAIM_ANCHOR);
+            // Allow Minecraft's second-hand interaction instead of opening a menu over an offhand payment.
+            if (blockEntity.isPresent()) {
+                var claim = blockEntity.get().getClaim();
+                if (claim != null && !claim.isProtectionActive() && player.getOffhandItem().is(claim.maintenanceRule().item()))
+                    return InteractionResult.PASS;
+            }
             blockEntity.ifPresent(anchor -> { if (anchor.getClaim() != null) anchor.getClaim().openUi(player); });
 
             return InteractionResult.SUCCESS;

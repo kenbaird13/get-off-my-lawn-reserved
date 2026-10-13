@@ -24,6 +24,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.*;
@@ -34,6 +35,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -373,16 +375,26 @@ public class Claim {
 
     public void openUi(ServerPlayer player) {
         if (destroyed) return;
-        var gui = new ClaimGui(this, MenuType.HOPPER, player, false);
-        gui.setTitle(Component.translatable("text.goml.gui.claim.title"));
+        if (!isProtectionActive()) {
+            player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(expiredMessage()));
+            return;
+        }
+        var gui = new ClaimGui(this, MenuType.HOPPER, player, false) {
+            private int displayTicks;
 
-        gui.addSlot(GuiElementBuilder.from(this.icon)
-                .setName(Component.translatable("text.goml.gui.claim.about"))
-                .setLore(ClaimUtils.getClaimText(player.level().getServer(), this))
-        );
+            @Override
+            public void onTick() {
+                super.onTick();
+                if (isOpen() && ++displayTicks % 20 == 0)
+                    setSlot(0, claim.infoButton());
+            }
+        };
+        gui.setTitle(Component.translatable("text.goml.gui.claim.title").withStyle(style -> style.withItalic(false)));
+
+        gui.addSlot(infoButton());
 
         gui.addSlot(new GuiElementBuilder(Items.PLAYER_HEAD)
-                .setName(Component.translatable("text.goml.gui.claim.players").withStyle(ChatFormatting.WHITE))
+                .setName(Component.translatable("text.goml.gui.claim.players").withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false)))
                 .setCallback(() -> {
                     PagedGui.playClickSound(player);
                     ClaimPlayerListGui.open(player, this, ClaimUtils.isInAdminMode(player), () -> openUi(player));
@@ -390,7 +402,7 @@ public class Claim {
         );
 
         gui.addSlot(new GuiElementBuilder(Items.PLAYER_HEAD)
-                .setName(Component.translatable("text.goml.gui.claim.augments").withStyle(ChatFormatting.WHITE))
+                .setName(Component.translatable("text.goml.gui.claim.augments").withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false)))
                 .setSkullOwner(GOMLTextures.ANGELIC_AURA)
                 .setCallback(() -> {
                     PagedGui.playClickSound(player);
@@ -399,13 +411,13 @@ public class Claim {
         );
 
         gui.addSlot(new GuiElementBuilder(Items.CHEST)
-                .setName(Component.translatable("text.goml.maintenance.title"))
-                .setLore(ClaimMaintenanceGui.statusLines(this))
+                .setName(Component.translatable("text.goml.maintenance.title").withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false)))
+                .hideDefaultTooltip()
                 .setCallback(() -> new ClaimMaintenanceGui(player, this)));
 
         if (this.type == GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst() && ClaimUtils.isInAdminMode(player)) {
             gui.addSlot(new GuiElementBuilder(Items.PLAYER_HEAD)
-                    .setName(Component.translatable("text.goml.gui.admin_settings").withStyle(ChatFormatting.WHITE))
+                    .setName(Component.translatable("text.goml.gui.admin_settings").withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false)))
                     .setSkullOwner("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmY3YTQyMmRiMzVkMjhjZmI2N2U2YzE2MTVjZGFjNGQ3MzAwNzI0NzE4Nzc0MGJhODY1Mzg5OWE0NGI3YjUyMCJ9fX0=")
                     .setCallback(() -> {
                         PagedGui.playClickSound(player);
@@ -419,6 +431,24 @@ public class Claim {
         }
 
         gui.open();
+    }
+
+    private GuiElementBuilder infoButton() {
+        var displayIcon = getIcon().copy();
+        displayIcon.remove(DataComponents.CUSTOM_NAME);
+        return GuiElementBuilder.from(displayIcon)
+                .hideDefaultTooltip()
+                .setName(Component.translatable("text.goml.gui.claim.about").withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false)))
+                .setLore(List.of(
+                        Component.translatable("text.goml.position",
+                                Component.literal(getOrigin().toShortString()).withStyle(ChatFormatting.WHITE)
+                                        .append(Component.literal(" (" + getWorld() + ")").withStyle(ChatFormatting.GRAY)))
+                                .withStyle(ChatFormatting.BLUE).withStyle(style -> style.withItalic(false)),
+                        Component.translatable("text.goml.radius",
+                                Component.literal(Integer.toString(getRadius())).withStyle(ChatFormatting.WHITE))
+                                .withStyle(ChatFormatting.YELLOW).withStyle(style -> style.withItalic(false)),
+                        ClaimMaintenanceGui.timeRemaining(this),
+                        ClaimMaintenanceGui.status(this)));
     }
 
     public ClaimAnchorBlock getType() {
@@ -635,6 +665,12 @@ public class Claim {
         return !destroyed && (maintenanceRule().isExempt() || !maintenance.isOverdue());
     }
 
+    public Component expiredMessage() {
+        return Component.translatable("text.goml.maintenance.pay_help",
+                maintenanceRule().item().getDefaultInstance().getHoverName().copy().withStyle(ChatFormatting.WHITE))
+                .withStyle(ChatFormatting.YELLOW);
+    }
+
     public boolean canManage(Player player) {
         return !destroyed && !player.isSpectator() && (isOwner(player) || ClaimUtils.isInAdminMode(player));
     }
@@ -688,7 +724,7 @@ public class Claim {
 
     /** Server-thread transaction; null is success, otherwise no payment was consumed. */
     @Nullable
-    public Component takeOver(ServerPlayer player) {
+    public Component takeOver(ServerPlayer player, InteractionHand hand) {
         if (!server.isSameThread()) throw new IllegalStateException("Takeover must run on the server thread");
         var level = getWorldInstance(server);
         if (destroyed || level == null || player.level() != level || player.isSpectator()
@@ -699,8 +735,11 @@ public class Claim {
             return Component.translatable("text.goml.maintenance.protected_anchor");
         var rejection = ClaimPlacement.rejection(level, player, type, claimBox, this);
         if (rejection != null) return rejection;
-        if (!ClaimMaintenance.consumeOne(player.getInventory(), maintenanceRule().item()))
+        var payment = player.getItemInHand(hand);
+        if (payment.isEmpty() || !payment.is(maintenanceRule().item()))
             return Component.translatable("text.goml.maintenance.missing_item", maintenanceRule().item().getDefaultInstance().getHoverName());
+        payment.shrink(1);
+        player.getInventory().setChanged();
         for (var group : List.copyOf(getGroups())) group.removeClaim(this);
         getGroups().clear();
         trustedGroupKeys.clear();

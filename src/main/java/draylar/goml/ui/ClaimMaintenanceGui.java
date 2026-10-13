@@ -12,14 +12,15 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class ClaimMaintenanceGui extends ClaimGui {
     private int displayTicks;
 
     public ClaimMaintenanceGui(ServerPlayer player, Claim claim) {
-        super(claim, MenuType.GENERIC_9x3, player, false);
-        setTitle(Component.translatable("text.goml.maintenance.title"));
+        super(claim, MenuType.GENERIC_9x3, player, true);
+        setTitle(Component.translatable("text.goml.maintenance.title").withStyle(style -> style.withItalic(false)));
         for (int i = 0; i < getSize(); i++) setSlot(i, PagedGui.DisplayElement.filler().element());
         for (int i = 0; i < ClaimMaintenance.SIZE; i++) {
             setSlotRedirect(i, new Slot(claim.maintenance(), i, 0, 0) {
@@ -31,26 +32,29 @@ public final class ClaimMaintenanceGui extends ClaimGui {
             });
         }
         refreshStatus();
-        setSlot(22, new GuiElementBuilder(Items.EMERALD)
-                .setName(Component.translatable("text.goml.maintenance.pay"))
-                .addLoreLine(Component.translatable("text.goml.maintenance.pay_help"))
-                .setCallback(() -> {
-                    if (!hasAccess()) { close(false); return; }
-                    var error = claim.takeOver(player);
-                    if (error != null) player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(error));
-                    else {
-                        player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(Component.translatable("text.goml.maintenance.paid")));
-                        new ClaimMaintenanceGui(player, claim);
-                    }
-                }));
         setSlot(26, new GuiElementBuilder(Items.STRUCTURE_VOID)
-                .setName(Component.translatable("text.goml.gui.back"))
+                .setName(Component.translatable("text.goml.gui.back").withStyle(ChatFormatting.RED).withStyle(style -> style.withItalic(false)))
+                .hideDefaultTooltip()
                 .setCallback(() -> { close(false); if (!claim.isDestroyed()) claim.openUi(player); }));
         open();
     }
 
     private boolean canUseStorage() {
-        return hasAccess() && claim.isProtectionActive() && claim.canManage(player);
+        return hasAccess();
+    }
+
+    @Override
+    protected boolean hasAccess() {
+        return super.hasAccess() && claim.isProtectionActive();
+    }
+
+    @Override
+    public boolean open() {
+        if (!claim.isDestroyed() && !claim.isProtectionActive()) {
+            player.sendSystemMessage(GetOffMyLawn.CONFIG.prefix(claim.expiredMessage()));
+            return false;
+        }
+        return super.open();
     }
 
     @Override
@@ -61,7 +65,9 @@ public final class ClaimMaintenanceGui extends ClaimGui {
 
     private void refreshStatus() {
         setSlot(13, new GuiElementBuilder(claim.maintenanceRule().item())
-                .setName(status(claim)).setLore(statusLines(claim)));
+                .hideDefaultTooltip()
+                .setName(status(claim))
+                .setLore(maintenanceDetails(claim)));
     }
 
     @Override
@@ -73,17 +79,48 @@ public final class ClaimMaintenanceGui extends ClaimGui {
     public static Component status(Claim claim) {
         return Component.translatable(claim.maintenanceRule().isExempt() ? "text.goml.maintenance.exempt"
                 : claim.isProtectionActive() ? "text.goml.maintenance.active" : "text.goml.maintenance.overdue")
-                .withStyle(claim.isProtectionActive() ? ChatFormatting.GREEN : ChatFormatting.RED);
+                .withStyle(claim.maintenanceRule().isExempt() ? ChatFormatting.GRAY
+                        : claim.isProtectionActive() ? ChatFormatting.GREEN : ChatFormatting.RED)
+                .withStyle(style -> style.withItalic(false));
+    }
+
+    public static Component timeRemaining(Claim claim) {
+        if (claim.maintenanceRule().isExempt())
+            return Component.translatable("text.goml.maintenance.remaining_exempt")
+                    .withStyle(ChatFormatting.GRAY).withStyle(style -> style.withItalic(false));
+        long ticks = claim.maintenance().isInitialized() ? claim.maintenance().remainingTicks()
+                : claim.maintenanceRule().intervalTicks();
+        return Component.translatable("text.goml.maintenance.remaining", duration(ticks))
+                .withStyle(claim.isProtectionActive() ? ChatFormatting.GOLD : ChatFormatting.RED)
+                .withStyle(style -> style.withItalic(false));
+    }
+
+    private static Component duration(long ticks) {
+        long seconds = (ticks + 19) / 20;
+        return Component.translatable("text.goml.maintenance.duration", seconds / 60, seconds % 60)
+                .withStyle(ChatFormatting.WHITE).withStyle(style -> style.withItalic(false))
+                .append(" ")
+                .append(Component.translatable("text.goml.maintenance.ticks", ticks)
+                        .withStyle(ChatFormatting.GRAY).withStyle(style -> style.withItalic(false)));
+    }
+
+    private static List<Component> maintenanceDetails(Claim claim) {
+        var rule = claim.maintenanceRule();
+        var lines = new ArrayList<Component>(List.of(
+                Component.translatable("text.goml.maintenance.tier",
+                        claim.getType().getName().copy().withStyle(ChatFormatting.WHITE)).withStyle(ChatFormatting.BLUE).withStyle(style -> style.withItalic(false)),
+                Component.translatable("text.goml.maintenance.cost",
+                        rule.item().getDefaultInstance().getHoverName().copy().withStyle(ChatFormatting.WHITE)).withStyle(ChatFormatting.YELLOW).withStyle(style -> style.withItalic(false)),
+                Component.translatable("text.goml.maintenance.period", duration(rule.intervalTicks()))
+                        .withStyle(ChatFormatting.GOLD).withStyle(style -> style.withItalic(false))));
+        if (!rule.isExempt()) lines.add(timeRemaining(claim));
+        return lines;
     }
 
     public static List<Component> statusLines(Claim claim) {
-        var rule = claim.maintenanceRule();
-        long seconds = (claim.maintenance().remainingTicks() + 19) / 20;
-        return List.of(
-                Component.translatable("text.goml.maintenance.tier", claim.getType().getName()),
-                Component.translatable("text.goml.maintenance.cost", rule.item().getDefaultInstance().getHoverName()),
-                Component.translatable("text.goml.maintenance.period", rule.period),
-                Component.translatable("text.goml.maintenance.remaining", seconds / 60, seconds % 60),
-                status(claim));
+        var lines = new ArrayList<>(maintenanceDetails(claim));
+        // Full claim information used outside the maintenance menu needs a status line.
+        lines.add(status(claim));
+        return lines;
     }
 }

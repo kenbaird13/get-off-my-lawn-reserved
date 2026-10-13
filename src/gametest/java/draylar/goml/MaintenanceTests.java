@@ -24,14 +24,7 @@ import java.util.UUID;
 public class MaintenanceTests implements net.fabricmc.fabric.api.gametest.v1.FabricGameTest {
     @Override
     public void invokeTestMethod(GameTestHelper h, java.lang.reflect.Method method) {
-        var server = h.getLevel().getServer();
-        if (server.getProfileCache() == null) {
-            var authentication = new com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService(java.net.Proxy.NO_PROXY);
-            var services = net.minecraft.server.Services.create(authentication,
-                    server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toFile());
-            ((draylar.goml.mixin.TestServerServicesAccess) server).gomlTestSetServices(services);
-            net.minecraft.server.players.GameProfileCache.setUsesAuthentication(false);
-        }
+        TestEnvironment.initializeServices(h.getLevel().getServer());
         net.fabricmc.fabric.api.gametest.v1.FabricGameTest.super.invokeTestMethod(h, method);
     }
 
@@ -216,13 +209,13 @@ public class MaintenanceTests implements net.fabricmc.fabric.api.gametest.v1.Fab
             expire(target);
             target.maintenance().setItem(0, new ItemStack(Items.EMERALD, 3));
             player.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 2));
-            h.assertTrue(target.takeOver(player) == null, "eligible takeover succeeds");
+            h.assertTrue(target.takeOver(player, net.minecraft.world.InteractionHand.MAIN_HAND) == null, "eligible takeover succeeds");
             h.assertTrue(target.getOwners().equals(Set.of(player.getUUID())) && target.getTrusted().isEmpty(), "ownership replaced and trust cleared");
             saved = output(h);
             target.writeData(saved);
             h.assertTrue(input(h, saved.buildResult()).listOrEmpty("TrustedGroups", com.mojang.serialization.Codec.STRING).isEmpty(), "unresolved group keys cleared");
             h.assertValueEqual(target.maintenance().getItem(0).getCount(), 3, "old stock transferred");
-            h.assertTrue(target.takeOver(player) != null, "second takeover fails");
+            h.assertTrue(target.takeOver(player, net.minecraft.world.InteractionHand.MAIN_HAND) != null, "second takeover fails");
             h.assertValueEqual(player.getInventory().getItem(0).getCount(), 1, "one attributed payment only");
         } finally {
             if (target != null) GetOffMyLawn.CLAIM.get(h.getLevel()).remove(target);
@@ -342,6 +335,7 @@ public class MaintenanceTests implements net.fabricmc.fabric.api.gametest.v1.Fab
             h.assertValueEqual(target.maintenance().getItem(3).getCount(), 2, "drag second slot");
             target.removeOwner(owner.getUUID());
             var visitorGui = new ClaimMaintenanceGui(owner, target);
+            h.assertFalse(visitorGui.isOpen(), "non-owner cannot open maintenance inventory");
             owner.containerMenu.clicked(1, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, owner);
             owner.containerMenu.clicked(1, 0, net.minecraft.world.inventory.ClickType.PICKUP, owner);
             owner.containerMenu.clicked(1, 0, net.minecraft.world.inventory.ClickType.SWAP, owner);
@@ -432,7 +426,7 @@ public class MaintenanceTests implements net.fabricmc.fabric.api.gametest.v1.Fab
             h.assertFalse(source.grants(player, io.github.ladysnake.pal.VanillaAbilities.ALLOW_FLYING), "last expiration revokes flight");
             player.getInventory().setItem(0, new ItemStack(Items.DIAMOND));
             GetOffMyLawn.CONFIG.allowClaimOverlappingIfSameOwner = true;
-            h.assertTrue(first.takeOver(player) == null, "owner can pay overlapping claim");
+            h.assertTrue(first.takeOver(player, net.minecraft.world.InteractionHand.MAIN_HAND) == null, "owner can pay overlapping claim");
             first.tick(h.getLevel());
             h.assertTrue(source.grants(player, io.github.ladysnake.pal.VanillaAbilities.ALLOW_FLYING), "recovery re-enters tracked player");
         } finally {
@@ -569,6 +563,279 @@ public class MaintenanceTests implements net.fabricmc.fabric.api.gametest.v1.Fab
             h.assertValueEqual(closes.get(), 1, "access revocation does not invoke navigation");
         } finally { target.invalidateMenus(); owner.discard(); }
         h.succeed();
+    }
+
+    private static net.minecraft.world.InteractionResult clickAnchor(GameTestHelper h, net.minecraft.server.level.ServerPlayer player,
+                                                                    BlockPos pos, net.minecraft.world.InteractionHand hand) {
+        var hit = new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos),
+                net.minecraft.core.Direction.UP, pos, false);
+        return player.gameMode.useItemOn(player, h.getLevel(), player.getItemInHand(hand), hand, hit);
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void rightClickPaymentUsesHeldHand(GameTestHelper h) {
+        var original = GetOffMyLawn.CONFIG;
+        var player = h.makeMockServerPlayerInLevel();
+        var pos = h.absolutePos(BlockPos.ZERO).offset(0, 3, 0);
+        var target = claim(h, UUID.randomUUID(), pos);
+        var component = GetOffMyLawn.CLAIM.get(h.getLevel());
+        try {
+            GetOffMyLawn.CONFIG = new GOMLConfig();
+            GetOffMyLawn.CONFIG.maintenance.put("makeshift", rule(1));
+            h.getLevel().setBlockAndUpdate(pos, target.getType().defaultBlockState());
+            ((draylar.goml.block.entity.ClaimAnchorBlockEntity) h.getLevel().getBlockEntity(pos))
+                    .setClaim(target, target.getClaimBox());
+            component.add(target);
+            target.trust(UUID.randomUUID());
+            expire(target);
+            player.getInventory().setItem(1, new ItemStack(Items.DIAMOND, 4));
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.EMERALD, 2));
+            clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(target.maintenance().isOverdue(), "holding the wrong item cannot pay from inventory");
+            h.assertTrue(player.containerMenu == player.inventoryMenu, "expired anchor does not open a menu before payment");
+            h.assertValueEqual(player.getInventory().getItem(1).getCount(), 4, "unheld payment stock untouched");
+            h.assertValueEqual(player.getMainHandItem().getCount(), 2, "wrong held item untouched");
+            player.closeContainer();
+
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND, 3));
+            var result = clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(result.consumesAction() && target.isProtectionActive(), "anchor click restores protection");
+            h.assertValueEqual(player.getMainHandItem().getCount(), 2, "main-hand payment consumes exactly one");
+            h.assertTrue(target.getOwners().equals(Set.of(player.getUUID())) && target.getTrusted().isEmpty(), "click transfers ownership and clears trust");
+            h.assertValueEqual(target.maintenance().remainingTicks(), 1200L, "click starts the full interval");
+            var gui = new ClaimMaintenanceGui(player, target);
+            h.assertTrue(gui.getSlot(22).getItemStack().is(Items.WHITE_STAINED_GLASS_PANE), "former payment button is a filler");
+            gui.close(false);
+            clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertValueEqual(player.getMainHandItem().getCount(), 2, "active claim click does not pay again");
+            h.assertValueEqual(target.maintenance().remainingTicks(), 1200L, "active click preserves countdown");
+            player.closeContainer();
+
+            expire(target);
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+            player.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND, new ItemStack(Items.DIAMOND, 5));
+            var main = clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(main == net.minecraft.world.InteractionResult.PASS && target.maintenance().isOverdue(), "empty main hand allows the offhand interaction");
+            clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.OFF_HAND);
+            h.assertTrue(target.isProtectionActive(), "offhand click restores protection");
+            h.assertValueEqual(player.getOffhandItem().getCount(), 4, "offhand payment consumes exactly one");
+            h.assertValueEqual(player.getInventory().getItem(1).getCount(), 4, "both clicks leave unheld stock untouched");
+        } finally {
+            target.invalidateMenus(); component.remove(target); h.getLevel().removeBlock(pos, false);
+            player.discard(); GetOffMyLawn.CONFIG = original;
+        }
+        h.succeed();
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void rejectedBlockPaymentDoesNotPlaceItem(GameTestHelper h) {
+        var original = GetOffMyLawn.CONFIG;
+        var player = h.makeMockServerPlayerInLevel();
+        var pos = h.absolutePos(BlockPos.ZERO).offset(0, 3, 0);
+        var target = claim(h, UUID.randomUUID(), pos);
+        var neighbor = claim(h, player.getUUID(), pos.offset(2, 0, 0));
+        var component = GetOffMyLawn.CLAIM.get(h.getLevel());
+        try {
+            GetOffMyLawn.CONFIG = new GOMLConfig();
+            GetOffMyLawn.CONFIG.allowClaimOverlappingIfSameOwner = true;
+            GetOffMyLawn.CONFIG.maintenance.put("makeshift", new MaintenanceRule("minecraft:diamond_block", 1));
+            h.getLevel().setBlockAndUpdate(pos, target.getType().defaultBlockState());
+            ((draylar.goml.block.entity.ClaimAnchorBlockEntity) h.getLevel().getBlockEntity(pos))
+                    .setClaim(target, target.getClaimBox());
+            component.add(target); component.add(neighbor);
+            expire(target);
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.DIAMOND_BLOCK, 2));
+            clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(target.maintenance().isOverdue() && !target.isOwner(player), "neighbor ownership cannot take over overlapping target");
+            h.assertValueEqual(player.getMainHandItem().getCount(), 2, "rejected overlap does not consume payment");
+            h.assertTrue(h.getLevel().getBlockState(pos.above()).isAir(), "rejected block payment does not fall through into placement");
+            component.remove(neighbor);
+            GetOffMyLawn.CONFIG.maxClaimsPerPlayer = 0;
+            clickAnchor(h, player, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(target.maintenance().isOverdue(), "claim limit also rejects anchor payment");
+            h.assertValueEqual(player.getMainHandItem().getCount(), 2, "limit rejection preserves held stock");
+            h.assertTrue(h.getLevel().getBlockState(pos.above()).isAir(), "limit rejection does not place the block item");
+        } finally {
+            target.invalidateMenus(); component.remove(target); component.remove(neighbor);
+            h.getLevel().removeBlock(pos, false); h.getLevel().removeBlock(pos.above(), false);
+            player.discard(); GetOffMyLawn.CONFIG = original;
+        }
+        h.succeed();
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE)
+    public void expiredInventoryOpensOnlyAfterPayment(GameTestHelper h) {
+        var original = GetOffMyLawn.CONFIG;
+        var oldOwner = h.makeMockServerPlayerInLevel();
+        var visitor = h.makeMockServerPlayerInLevel();
+        var pos = h.absolutePos(BlockPos.ZERO).offset(0, 3, 0);
+        var target = claim(h, oldOwner.getUUID(), pos);
+        var component = GetOffMyLawn.CLAIM.get(h.getLevel());
+        try {
+            GetOffMyLawn.CONFIG = new GOMLConfig();
+            GetOffMyLawn.CONFIG.maintenance.put("makeshift", rule(1));
+            h.getLevel().setBlockAndUpdate(pos, target.getType().defaultBlockState());
+            ((draylar.goml.block.entity.ClaimAnchorBlockEntity) h.getLevel().getBlockEntity(pos))
+                    .setClaim(target, target.getClaimBox());
+            component.add(target);
+            target.maintenance().setItem(0, new ItemStack(Items.STONE, 6));
+            expire(target);
+            GetOffMyLawn.CONFIG.maintenance.put("makeshift", new MaintenanceRule("minecraft:emerald", 1));
+            var message = (net.minecraft.network.chat.contents.TranslatableContents) target.expiredMessage().getContents();
+            h.assertValueEqual(message.getKey(), "text.goml.maintenance.pay_help", "expired interaction uses the ownership instruction");
+            h.assertValueEqual(((Component) message.getArgs()[0]).getString(), Items.EMERALD.getDefaultInstance().getHoverName().getString(), "instruction names the configured payment item");
+
+            target.openUi(oldOwner);
+            target.openUi(visitor);
+            h.assertTrue(oldOwner.containerMenu == oldOwner.inventoryMenu && visitor.containerMenu == visitor.inventoryMenu,
+                    "expired main menu remains closed for old owner and visitor");
+            var ownerMenu = new ClaimMaintenanceGui(oldOwner, target);
+            var visitorMenu = new ClaimMaintenanceGui(visitor, target);
+            h.assertFalse(ownerMenu.isOpen() || visitorMenu.isOpen(), "expired inventory cannot open directly");
+            h.assertFalse(ownerMenu.getSlotRedirect(0).mayPickup(oldOwner), "old owner cannot withdraw before reclaiming");
+            h.assertTrue(visitorMenu.quickMove(0).isEmpty(), "unclaimed inventory cannot shift stock");
+            h.assertValueEqual(target.maintenance().getItem(0).getCount(), 6, "blocked opens preserve stored stock");
+
+            visitor.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.EMERALD, 2));
+            clickAnchor(h, visitor, pos, net.minecraft.world.InteractionHand.MAIN_HAND);
+            h.assertTrue(target.isOwner(visitor) && target.isProtectionActive(), "payment establishes new owner and protection");
+            h.assertTrue(visitor.containerMenu != visitor.inventoryMenu, "successful payment opens maintenance inventory");
+            var claimedMenu = new ClaimMaintenanceGui(visitor, target);
+            h.assertTrue(claimedMenu.isOpen() && claimedMenu.getSlotRedirect(0).mayPickup(visitor), "new owner can open and use inventory");
+            var oldOwnerMenu = new ClaimMaintenanceGui(oldOwner, target);
+            h.assertFalse(oldOwnerMenu.isOpen(), "previous owner cannot reopen reclaimed inventory");
+        } finally {
+            target.invalidateMenus(); component.remove(target); h.getLevel().removeBlock(pos, false);
+            oldOwner.discard(); visitor.discard(); GetOffMyLawn.CONFIG = original;
+        }
+        h.succeed();
+    }
+
+    private static Component infoLine(ItemStack icon, String key) {
+        return icon.getOrDefault(DataComponents.LORE, net.minecraft.world.item.component.ItemLore.EMPTY).lines().stream()
+                .filter(line -> line.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents text
+                        && text.getKey().equals(key))
+                .findFirst().orElseThrow(() -> new AssertionError("Missing information: " + key));
+    }
+
+    private static long displayedTicks(ItemStack icon) {
+        return displayedDurationTicks(infoLine(icon, "text.goml.maintenance.remaining"));
+    }
+
+    private static long displayedDurationTicks(Component line) {
+        var match = java.util.regex.Pattern.compile("\\((\\d+) ticks\\)").matcher(line.getString());
+        if (!match.find()) throw new AssertionError("Missing parenthesized tick count: " + line.getString());
+        return Long.parseLong(match.group(1));
+    }
+
+    private static void assertGrayTicks(GameTestHelper h, Component line, long ticks) {
+        var grayText = new StringBuilder();
+        line.visit((style, text) -> {
+            if (net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.GRAY).equals(style.getColor()))
+                grayText.append(text);
+            return java.util.Optional.<Boolean>empty();
+        }, net.minecraft.network.chat.Style.EMPTY);
+        h.assertValueEqual(grayText.toString(), "(" + ticks + " ticks)", "parenthesized tick count is gray");
+    }
+
+    private static void assertMainStatus(GameTestHelper h, ItemStack icon) {
+        var keys = icon.getOrDefault(DataComponents.LORE, net.minecraft.world.item.component.ItemLore.EMPTY).lines().stream()
+                .map(line -> ((net.minecraft.network.chat.contents.TranslatableContents) line.getContents()).getKey()).toList();
+        h.assertValueEqual(keys, java.util.List.of("text.goml.position", "text.goml.radius",
+                "text.goml.maintenance.remaining", "text.goml.maintenance.active"), "main status has exactly the requested four rows in order");
+    }
+
+    private static void assertPlainTooltip(GameTestHelper h, ItemStack icon, net.minecraft.server.level.ServerPlayer player) {
+        for (var line : icon.getTooltipLines(net.minecraft.world.item.Item.TooltipContext.of(h.getLevel()), player,
+                net.minecraft.world.item.TooltipFlag.NORMAL)) {
+            h.assertFalse(line.visit((style, text) -> style.isItalic() ? java.util.Optional.of(true) : java.util.Optional.empty(),
+                    net.minecraft.network.chat.Style.EMPTY).isPresent(), "rendered menu tooltip has no italic text");
+        }
+    }
+
+    @GameTest(template = EMPTY_STRUCTURE, timeoutTicks = 100)
+    public void infoCardsRefreshAndKeepDetails(GameTestHelper h) {
+        var mainPlayer = h.makeMockServerPlayerInLevel();
+        var storagePlayer = h.makeMockServerPlayerInLevel();
+        var pos = h.absolutePos(BlockPos.ZERO).offset(0, 3, 0);
+        var target = claim(h, mainPlayer.getUUID(), pos);
+        target.addOwner(storagePlayer.getUUID());
+        var trusted = UUID.randomUUID();
+        target.trust(trusted);
+        var profiles = h.getLevel().getServer().getProfileCache();
+        profiles.add(new com.mojang.authlib.GameProfile(mainPlayer.getUUID(), "CountdownOwner"));
+        profiles.add(new com.mojang.authlib.GameProfile(trusted, "CountdownTrusted"));
+        var savedIcon = new ItemStack(Items.STONE);
+        savedIcon.set(DataComponents.CUSTOM_NAME, Component.literal("Saved anchor name"));
+        savedIcon.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(java.util.List.of(Component.literal("Saved radius detail"))));
+        target.internal_setIcon(savedIcon);
+        target.maintenance().renew(target.maintenanceRule());
+        target.maintenance().tick(target.maintenanceRule());
+        var component = GetOffMyLawn.CLAIM.get(h.getLevel());
+        component.add(target);
+        target.openUi(mainPlayer);
+        var mainMenu = mainPlayer.containerMenu;
+        var storage = new ClaimMaintenanceGui(storagePlayer, target);
+        var start = target.maintenance().remainingTicks();
+        var mainIcon = mainMenu.getSlot(0).getItem();
+        var storageIcon = storage.getSlot(13).getItemStack();
+        h.assertValueEqual(displayedTicks(mainIcon), start, "main status includes exact remaining ticks");
+        h.assertValueEqual(displayedTicks(storageIcon), start, "maintenance status uses the same remaining ticks");
+        h.assertTrue(mainIcon.has(DataComponents.HIDE_ADDITIONAL_TOOLTIP), "anchor tooltip cannot add a duplicate radius");
+        assertMainStatus(h, mainIcon);
+        infoLine(storageIcon, "text.goml.maintenance.tier");
+        infoLine(storageIcon, "text.goml.maintenance.cost");
+        var interval = infoLine(storageIcon, "text.goml.maintenance.period");
+        h.assertValueEqual(displayedDurationTicks(interval), target.maintenanceRule().intervalTicks(), "payment interval includes exact ticks");
+        h.assertTrue(interval.getString().contains("30 min 0 sec"), "payment interval also shows normal time");
+        assertGrayTicks(h, interval, target.maintenanceRule().intervalTicks());
+        for (var icon : java.util.List.of(mainIcon, storageIcon)) {
+            h.assertFalse(icon.getOrDefault(DataComponents.LORE, net.minecraft.world.item.component.ItemLore.EMPTY).lines().stream()
+                    .anyMatch(line -> line.getString().equals("Saved radius detail")), "saved icon lore does not replace the current information");
+        }
+        for (int slot = 0; slot < 5; slot++) assertPlainTooltip(h, mainMenu.getSlot(slot).getItem(), mainPlayer);
+        for (int slot = 9; slot < storage.getSize(); slot++) assertPlainTooltip(h, storage.getSlot(slot).getItemStack(), storagePlayer);
+        h.assertValueEqual(((net.minecraft.network.chat.contents.TranslatableContents) storageIcon.getHoverName().getContents()).getKey(), "text.goml.maintenance.active", "maintenance heading retains protection status");
+        var entry = mainMenu.getSlot(3).getItem();
+        h.assertTrue(entry.getOrDefault(DataComponents.LORE, net.minecraft.world.item.component.ItemLore.EMPTY).lines().isEmpty(), "maintenance entry has no detail lore");
+        h.assertValueEqual(entry.get(DataComponents.ITEM_NAME).getStyle().getColor(), net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.WHITE), "maintenance entry uses the existing white button color");
+        h.assertValueEqual(mainIcon.get(DataComponents.ITEM_NAME).getStyle().getColor(), net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.WHITE), "main information heading uses white");
+        var remaining = infoLine(mainIcon, "text.goml.maintenance.remaining");
+        h.assertValueEqual(remaining.getStyle().getColor(), net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.GOLD), "countdown label uses gold");
+        h.assertTrue(remaining.getString().contains("30 min 0 sec"), "partial seconds round up in the normal-time countdown");
+        assertGrayTicks(h, remaining, start);
+        assertGrayTicks(h, infoLine(storageIcon, "text.goml.maintenance.remaining"), start);
+        var text = (net.minecraft.network.chat.contents.TranslatableContents) remaining.getContents();
+        h.assertValueEqual(((Component) text.getArgs()[0]).getStyle().getColor(), net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.WHITE), "normal time uses white");
+
+        h.startSequence().thenIdle(25).thenExecute(() -> {
+            try {
+                h.assertTrue(mainPlayer.containerMenu == mainMenu && storage.isOpen(), "both status screens remain open");
+                var mainTicks = displayedTicks(mainMenu.getSlot(0).getItem());
+                var storageTicks = displayedTicks(storage.getSlot(13).getItemStack());
+                h.assertTrue(mainTicks < start && storageTicks < start, "both open cards refresh while the claim ticks");
+                h.assertValueEqual(mainTicks, storageTicks, "both open cards show the same refreshed value");
+                assertGrayTicks(h, infoLine(mainMenu.getSlot(0).getItem(), "text.goml.maintenance.remaining"), mainTicks);
+                assertGrayTicks(h, infoLine(storage.getSlot(13).getItemStack(), "text.goml.maintenance.remaining"), storageTicks);
+                assertMainStatus(h, mainMenu.getSlot(0).getItem());
+                infoLine(storage.getSlot(13).getItemStack(), "text.goml.maintenance.cost");
+                infoLine(storage.getSlot(13).getItemStack(), "text.goml.maintenance.period");
+                assertPlainTooltip(h, mainMenu.getSlot(0).getItem(), mainPlayer);
+                assertPlainTooltip(h, storage.getSlot(13).getItemStack(), storagePlayer);
+                expire(target);
+                h.assertTrue(mainPlayer.containerMenu == mainPlayer.inventoryMenu && !storage.isOpen(), "expiration still closes both menus");
+                var expired = ClaimMaintenanceGui.timeRemaining(target);
+                h.assertValueEqual(displayedDurationTicks(expired), 0L, "expired countdown is zero ticks");
+                h.assertTrue(expired.getString().contains("0 min 0 sec"), "expired countdown shows zero normal time");
+                assertGrayTicks(h, expired, 0L);
+                target.internal_setType(GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst());
+                var exempt = ClaimMaintenanceGui.timeRemaining(target);
+                h.assertValueEqual(((net.minecraft.network.chat.contents.TranslatableContents) exempt.getContents()).getKey(), "text.goml.maintenance.remaining_exempt", "exempt claims retain the time-remaining label without a payment countdown");
+                h.assertValueEqual(exempt.getStyle().getColor(), net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.GRAY), "exemption uses neutral gray");
+            } finally {
+                target.invalidateMenus(); component.remove(target); mainPlayer.discard(); storagePlayer.discard();
+            }
+        }).thenSucceed();
     }
 
 }
