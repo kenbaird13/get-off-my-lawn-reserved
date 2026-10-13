@@ -16,8 +16,6 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -52,12 +50,12 @@ public class GOMLBlocks {
         var claimAnchorBlock = Registry.register(
                     BuiltInRegistries.BLOCK,
                     id,
-                    new ClaimAnchorBlock(BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id)).strength(hardness, 3600000.0F), radius, texture)
+                    new ClaimAnchorBlock(BlockBehaviour.Properties.of().strength(hardness, 3600000.0F), radius, texture)
             );
 
 
         var registeredItem = Registry.register(BuiltInRegistries.ITEM, id, new ClaimAnchorBlockItem(claimAnchorBlock,
-                new Item.Properties().setId(ResourceKey.create(Registries.ITEM, GetOffMyLawn.id(name))).useBlockDescriptionPrefix(), 0));
+                new Item.Properties(), 0));
         ANCHORS.add(claimAnchorBlock);
         return Pair.of(claimAnchorBlock, registeredItem);
     }
@@ -72,14 +70,14 @@ public class GOMLBlocks {
         T registered = Registry.register(
                 BuiltInRegistries.BLOCK,
                 id,
-                augment.apply(BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id)))
+                augment.apply(BlockBehaviour.Properties.of())
         );
         BooleanSupplier check = () -> GetOffMyLawn.CONFIG.enabledAugments.getOrDefault(registered, true);
 
         registered.setEnabledCheck(check);
 
         Item registeredItem = Registry.register(BuiltInRegistries.ITEM, id, new ToggleableBlockItem((Block & PolymerHeadBlock) registered,
-                new Item.Properties().setId(ResourceKey.create(Registries.ITEM, id)).useBlockDescriptionPrefix(), tooltipLines, check));
+                new Item.Properties(), tooltipLines, check));
         AUGMENTS.add(registered);
 
         GOMLAugments.register(id, registered);

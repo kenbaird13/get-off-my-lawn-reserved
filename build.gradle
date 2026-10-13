@@ -1,6 +1,6 @@
 
 plugins {
-	id 'net.fabricmc.fabric-loom' version '1.15.+'
+	id 'net.fabricmc.fabric-loom-remap' version '1.15.+'
 	id 'maven-publish'
 	id "me.modmuss50.mod-publish-plugin" version "2.2.0"
 
@@ -15,6 +15,17 @@ group = project.maven_group
 
 loom {
 	accessWidenerPath = file("src/main/resources/goml.accesswidener")
+}
+
+// Keep server integration tests in a separate development mod, outside the released jar.
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "goml-test"
+		enableGameTests = true
+		enableClientGameTests = false
+		eula = true
+	}
 }
 
 repositories {
@@ -58,17 +69,18 @@ repositories {
 dependencies {
 	//to change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-	implementation include("com.jamieswhiteshirt:rtree-3i-lite-fabric:${project.rtree_version}")
+	modImplementation include("com.jamieswhiteshirt:rtree-3i-lite-fabric:${project.rtree_version}")
 	// CCA for data
-	implementation include("org.ladysnake.cardinal-components-api:cardinal-components-base:${project.cca_version}")
+	modImplementation include("org.ladysnake.cardinal-components-api:cardinal-components-base:${project.cca_version}")
 
-	implementation include("org.ladysnake.cardinal-components-api:cardinal-components-level:${project.cca_version}")
+	modImplementation include("org.ladysnake.cardinal-components-api:cardinal-components-world:${project.cca_version}")
 
 	// Flight
-	implementation include("io.github.ladysnake:PlayerAbilityLib:${pal_version}")
+	modImplementation include("io.github.ladysnake:PlayerAbilityLib:${pal_version}")
 
 	// Dev testing
 	//modCompileOnly 'curse.maven:BLAST-349938:3838824'
@@ -81,12 +93,12 @@ dependencies {
 	compileOnly "curse.maven:dynmapforge-59433:5442994"
 
 	// Server side stuff
-	implementation "eu.pb4:polymer-core:${project.polymer_version}"
-	implementation include("eu.pb4:sgui:${project.sgui_version}")
-	implementation include("eu.pb4:placeholder-api:${project.placeholder_version}")
-	implementation include("xyz.nucleoid:server-translations-api:${project.stapi_version}")
-	compileOnly "me.lucko:fabric-permissions-api:0.7.0"
-	implementation include("eu.pb4:common-protection-api:2.0.0")
+	modImplementation "eu.pb4:polymer-core:${project.polymer_version}"
+	modImplementation include("eu.pb4:sgui:${project.sgui_version}")
+	modImplementation include("eu.pb4:placeholder-api:${project.placeholder_version}")
+	modImplementation include("xyz.nucleoid:server-translations-api:${project.stapi_version}")
+	modCompileOnly "me.lucko:fabric-permissions-api:0.3.1"
+	modImplementation include("eu.pb4:common-protection-api:1.0.0")
 
 	// Webmap integrations
 	compileOnly "us.dynmap:DynmapCoreAPI:${dynmap_version}"
@@ -95,9 +107,10 @@ dependencies {
 
 processResources {
 	inputs.property "version", project.version
+	inputs.property "minecraft_version", project.minecraft_version
 
 	filesMatching('fabric.mod.json') {
-		expand "version": project.version
+		expand "version": project.version, "minecraft_version": project.minecraft_version
 	}
 }
 
@@ -106,6 +119,8 @@ processResources {
 // see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
 tasks.withType(JavaCompile) {
 	options.encoding = "UTF-8"
+	options.release = 21
+	options.compilerArgs += ["-Xmaxerrs", "1000"]
 }
 
 jar {
@@ -136,7 +151,7 @@ publishing {
 publishMods {
 	changelog = System.getenv("CHANGELOG")
 	type = project.mod_version.contains("-") ? BETA : STABLE
-	file = jar.archiveFile
+	file = remapJar.archiveFile
 	modLoaders.add("fabric")
 
 	if (System.getenv("CURSEFORGE")) {

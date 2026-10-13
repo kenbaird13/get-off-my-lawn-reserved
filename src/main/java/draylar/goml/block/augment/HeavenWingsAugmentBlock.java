@@ -22,7 +22,7 @@ public class HeavenWingsAugmentBlock extends SelectiveClaimAugmentBlock {
                     return;
                 }
 
-                var canFly = ClaimUtils.getClaimsAt(handler.player.level(), handler.player.blockPosition())
+                var canFly = ClaimUtils.getActiveClaimsAt(handler.player.level(), handler.player.blockPosition())
                         .filter(x -> x.getValue().hasAugment(this) && this.canApply(x.getValue(), handler.player)).isNotEmpty();
 
                 if (canFly) {
@@ -46,7 +46,7 @@ public class HeavenWingsAugmentBlock extends SelectiveClaimAugmentBlock {
 
     @Override
     public void onPlayerExit(Claim claim, Player player) {
-        var canFly = ClaimUtils.getClaimsAt(player.level(), player.blockPosition())
+        var canFly = ClaimUtils.getActiveClaimsAt(player.level(), player.blockPosition())
                 .filter(x -> x.getValue() != claim && x.getValue().hasAugment(this) && this.canApply(x.getValue(), player)).isNotEmpty();
 
         if (!canFly) {

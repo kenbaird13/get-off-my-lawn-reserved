@@ -6,9 +6,15 @@
     "###"
   ],
   "key": {
-    "#": "minecraft:cobbled_deepslate",
-    "E": "minecraft:tnt",
-    "W": "minecraft:water_bucket"
+    "#": {
+      "item": "minecraft:cobbled_deepslate"
+    },
+    "E": {
+      "item": "minecraft:tnt"
+    },
+    "W": {
+      "item": "minecraft:water_bucket"
+    }
   },
   "result": {
     "id": "goml:explosion_controller",

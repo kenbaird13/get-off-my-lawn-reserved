@@ -9,7 +9,7 @@ import org.dynmap.markers.MarkerSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
@@ -206,7 +206,7 @@ public class DynmapCompat extends WebmapCompat {
             return "DIM1";
         }
 
-        Identifier id = world.dimension().identifier();
+        ResourceLocation id = world.dimension().location();
         return (id.getNamespace() + "_" + id.getPath()).replace(':', '_');
     }
 }

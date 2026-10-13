@@ -5,13 +5,10 @@ import com.llamalad7.mixinextras.sugar.Local;
 import draylar.goml.api.ClaimUtils;
 import draylar.goml.other.OriginOwner;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.HashSet;
-import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -37,8 +34,8 @@ public abstract class FallingBlockEntityMixin extends Entity implements OriginOw
         return false;
     }
 
-    @Inject(method = "causeFallDamage", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;ceil(D)I", ordinal = 0), cancellable = true)
-    private void blockFallDamage(double fallDistance, float damagePerDistance, DamageSource damageSource, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "causeFallDamage", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;ceil(F)I", ordinal = 0), cancellable = true)
+    private void blockFallDamage(float fallDistance, float damagePerDistance, DamageSource damageSource, CallbackInfoReturnable<Boolean> cir) {
         if (this.level().isClientSide()) {
             return;
         }

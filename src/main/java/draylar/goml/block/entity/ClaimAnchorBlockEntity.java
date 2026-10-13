@@ -8,15 +8,14 @@ import draylar.goml.api.ClaimBox;
 import draylar.goml.api.ClaimUtils;
 import draylar.goml.registry.GOMLEntities;
 import eu.pb4.polymer.core.api.utils.PolymerObject;
-import net.fabricmc.fabric.api.util.NbtType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
+import draylar.goml.other.nbt.NbtInput;
+import draylar.goml.other.nbt.NbtOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -83,8 +82,9 @@ public class ClaimAnchorBlockEntity extends BlockEntity implements PolymerObject
     }
 
     @Override
-    protected void saveAdditional(ValueOutput view) {
-        super.saveAdditional(view);
+    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+        var view = new NbtOutput(tag, registries);
+        super.saveAdditional(tag, registries);
         var positions = view.list(AUGMENT_LIST_KEY, Codec.LONG);
         for (BlockPos loadPosition : this.loadPositions) {
             positions.add(loadPosition.asLong());
@@ -97,27 +97,17 @@ public class ClaimAnchorBlockEntity extends BlockEntity implements PolymerObject
     }
 
     @Override
-    public void loadAdditional(ValueInput view) {
+    public void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+        var view = new NbtInput(tag, registries);
         var positions = view.listOrEmpty(AUGMENT_LIST_KEY, Codec.LONG);
         positions.forEach(sub -> {
             BlockPos foundPos = BlockPos.of(sub);
             this.loadPositions.add(foundPos);
         });
 
-        super.loadAdditional(view);
+        super.loadAdditional(tag, registries);
     }
 
-    @Override
-    public void preRemoveSideEffects(BlockPos pos, BlockState oldState) {
-        super.preRemoveSideEffects(pos, oldState);
-        if (this.level != null) {
-            ClaimUtils.getClaimsAt(level, pos).forEach(claimedArea -> {
-                if (ClaimUtils.canDestroyClaimBlock(claimedArea, null, pos)) {
-                    claimedArea.getValue().destroy();
-                }
-            });
-        }
-    }
 
     public void addChild(BlockPos pos, Augment augment) {
         this.claim.addAugment(pos, augment);
@@ -163,6 +153,7 @@ public class ClaimAnchorBlockEntity extends BlockEntity implements PolymerObject
 
     public void from(ClaimAnchorBlockEntity be) {
         this.claim = be.claim;
+        this.box = this.claim != null ? this.claim.getClaimBox() : be.box;
     }
 
     @Override

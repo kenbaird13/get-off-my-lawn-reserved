@@ -35,7 +35,7 @@ public class PlayerHeadIcon {
      */
     public String getRaw(){
         return this.rawIcon;
-    }    
+    }
     /**
      * @return an HTML img tag with base64 icon embedded, displayed at 8px
      * @implNote Returns an empty string if used during construction
@@ -58,7 +58,7 @@ public class PlayerHeadIcon {
      * @implNote Returns an empty string if used during construction
      */
     public String getHtml(String size, String css){
-        return (this.isBlank) ? "" : 
+        return (this.isBlank) ? "" :
         "<img alt=\"[icon]\" src=\"data:image/png;base64," + this.rawIcon + "\" width=\"" + size + "\" height=\"" + size + "\" style=\"vertical-align:middle;image-rendering:pixelated;" + css + "\" />";
     }
 

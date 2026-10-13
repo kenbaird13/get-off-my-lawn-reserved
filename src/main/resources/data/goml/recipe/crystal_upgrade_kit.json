@@ -6,10 +6,18 @@
     "#i#"
   ],
   "key": {
-    "#": "minecraft:stone",
-    "i": "minecraft:diamond",
-    "I": "minecraft:diamond_block",
-    "O": "minecraft:iron_ingot"
+    "#": {
+      "item": "minecraft:stone"
+    },
+    "i": {
+      "item": "minecraft:diamond"
+    },
+    "I": {
+      "item": "minecraft:diamond_block"
+    },
+    "O": {
+      "item": "minecraft:iron_ingot"
+    }
   },
   "result": {
     "id": "goml:crystal_upgrade_kit",

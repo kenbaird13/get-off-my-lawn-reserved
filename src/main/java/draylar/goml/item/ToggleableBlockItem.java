@@ -3,12 +3,10 @@ package draylar.goml.item;
 import eu.pb4.polymer.core.api.block.PolymerHeadBlock;
 import java.util.List;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -33,11 +31,11 @@ public class ToggleableBlockItem extends TooltippedBlockItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay displayComponent, Consumer<Component> textConsumer, TooltipFlag type) {
+    public void appendHoverText(ItemStack stack, TooltipContext context, java.util.List<Component> textConsumer, TooltipFlag type) {
         if (isEnabled.getAsBoolean()) {
-            super.appendHoverText(stack, context, displayComponent, textConsumer, type);
+            super.appendHoverText(stack, context, textConsumer, type);
         } else {
-            textConsumer.accept(Component.translatable(String.format("text.goml.disabled_augment")).withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+            textConsumer.add(Component.translatable(String.format("text.goml.disabled_augment")).withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
         }
     }
 }

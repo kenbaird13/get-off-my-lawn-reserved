@@ -12,7 +12,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.PermissionLevel;
 import org.jetbrains.annotations.ApiStatus;
 
 import java.util.ArrayList;
@@ -29,10 +28,10 @@ public class ClaimListGui extends PagedGui {
     protected ClaimListGui(ServerPlayer player, GameProfile target) {
         super(player, null);
 
-        ClaimUtils.getClaimsWithAccess(player.level(), target.id()).forEach(this.claimList::add);
+        ClaimUtils.getClaimsWithAccess(player.level(), target.getId()).forEach(this.claimList::add);
         this.setTitle(Component.translatable(
-                player.getGameProfile().id().equals(target.id()) ? "text.goml.your_claims" : "text.goml.someones_claims",
-                target.name()
+                player.getGameProfile().getId().equals(target.getId()) ? "text.goml.your_claims" : "text.goml.someones_claims",
+                target.getName()
         ));
 
         this.updateDisplay();
@@ -61,10 +60,10 @@ public class ClaimListGui extends PagedGui {
             icon.setLore(lore);
 
             icon.setCallback(() -> {
-                if (FabricPermissionBridge.checkPermission(this.player, id("teleport"), PermissionLevel.ADMINS)) {
+                if (FabricPermissionBridge.checkPermission(this.player, id("teleport"), 2)) {
                     var world = server.getLevel(ResourceKey.create(Registries.DIMENSION, claim.getWorld()));
                     if (world != null) {
-                        this.player.teleportTo(world, claim.getOrigin().getX(), claim.getOrigin().getY() + 1, claim.getOrigin().getZ(), Set.of(), this.player.getYRot(), this.player.getXRot(), false);
+                        this.player.teleportTo(world, claim.getOrigin().getX(), claim.getOrigin().getY() + 1, claim.getOrigin().getZ(), Set.of(), this.player.getYRot(), this.player.getXRot());
                     }
                 }
             });

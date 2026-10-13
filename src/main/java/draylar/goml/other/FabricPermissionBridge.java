@@ -2,112 +2,45 @@ package draylar.goml.other;
 
 import me.lucko.fabric.api.permissions.v0.Options;
 import me.lucko.fabric.api.permissions.v0.Permissions;
-import net.fabricmc.fabric.api.permission.v1.PermissionNode;
-import net.fabricmc.fabric.api.util.TriState;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.resources.Identifier;
-import net.minecraft.server.permissions.Permission;
-import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.OptionalInt;
 import java.util.function.Predicate;
-/**
- * Temporary wrapper for permission checks, targets yet to be merged fabric-permission-api-v1, making the mod support it before it's finalized.
- * Also contains a fallback when it's not present or it changes and fails to adapt.
- */
-public class FabricPermissionBridge {
-    public static final boolean IS_LOADED = FabricLoader.getInstance().isModLoaded("fabric-permission-api-v1");
-    public static final boolean IS_LOADED_LEGACY = FabricLoader.getInstance().isModLoaded("fabric-permissions-api-v0");
 
-    public static boolean checkPermission(Player player, Identifier permission, PermissionLevel level) {
+/** Optional Lucko permissions support with vanilla command-level fallbacks. */
+public final class FabricPermissionBridge {
+    private static final boolean IS_LOADED = FabricLoader.getInstance().isModLoaded("fabric-permissions-api-v0");
+    private static String node(ResourceLocation permission) { return permission.getNamespace() + "." + permission.getPath().replace('/', '.'); }
+
+    public static boolean checkPermission(Player player, ResourceLocation permission, int level) {
+        return IS_LOADED ? Permissions.check(player, node(permission), level) : player.hasPermissions(level);
+    }
+    public static boolean checkPermission(CommandSourceStack source, ResourceLocation permission, int level) {
+        return IS_LOADED ? Permissions.check(source, node(permission), level) : source.hasPermission(level);
+    }
+    public static boolean checkPermission(Player player, ResourceLocation permission, boolean fallback) {
+        return IS_LOADED ? Permissions.check(player, node(permission), fallback) : fallback;
+    }
+    public static boolean checkPermission(CommandSourceStack source, ResourceLocation permission, boolean fallback) {
+        return IS_LOADED ? Permissions.check(source, node(permission), fallback) : fallback;
+    }
+    public static Predicate<CommandSourceStack> require(ResourceLocation permission, int level) {
+        return source -> checkPermission(source, permission, level);
+    }
+    public static Predicate<CommandSourceStack> require(ResourceLocation permission, boolean fallback) {
+        return source -> checkPermission(source, permission, fallback);
+    }
+    public static OptionalInt checkPermissionInteger(Player player, ResourceLocation permission) {
         if (IS_LOADED) {
-            var res = player.checkPermission(permission);
-            if (res != TriState.DEFAULT) {
-                return res.get();
+            var value = Options.get(player, node(permission));
+            if (value.isPresent()) {
+                try { return OptionalInt.of(Integer.parseInt(value.get())); }
+                catch (NumberFormatException ignored) { }
             }
         }
-
-        if (IS_LOADED_LEGACY) {
-            return Permissions.check(player, permission.toShortLanguageKey().replace('/', '.'), level);
-        }
-
-        return player.permissions().hasPermission(new Permission.HasCommandLevel(level));
-    }
-
-    public static boolean checkPermission(CommandSourceStack player, Identifier permission, PermissionLevel level) {
-        if (IS_LOADED) {
-            var res = player.checkPermission(permission);
-            if (res != TriState.DEFAULT) {
-                return res.get();
-            }
-        }
-
-        if (IS_LOADED_LEGACY) {
-            return Permissions.check(player, permission.toShortLanguageKey().replace('/', '.'), level);
-        }
-
-        return player.permissions().hasPermission(new Permission.HasCommandLevel(level));
-    }
-
-    public static boolean checkPermission(Player player, Identifier permission, boolean defaultValue) {
-        if (IS_LOADED) {
-            var res = player.checkPermission(permission);
-            if (res != TriState.DEFAULT) {
-                return res.get();
-            }
-        }
-
-        if (IS_LOADED_LEGACY) {
-            return Permissions.check(player, permission.toShortLanguageKey().replace('/', '.'), defaultValue);
-        }
-
-        return defaultValue;
-    }
-
-    public static boolean checkPermission(CommandSourceStack player, Identifier permission, boolean defaultValue) {
-        if (IS_LOADED) {
-            var res = player.checkPermission(permission);
-            if (res != TriState.DEFAULT) {
-                return res.get();
-            }
-        }
-
-        if (IS_LOADED_LEGACY) {
-            return Permissions.check(player, permission.toShortLanguageKey().replace('/', '.'), defaultValue);
-        }
-
-        return defaultValue;
-    }
-
-    public static Predicate<CommandSourceStack> require(Identifier permission, PermissionLevel level) {
-        return ctx -> checkPermission(ctx, permission, level);
-    }
-
-    public static Predicate<CommandSourceStack> require(Identifier permission, boolean def) {
-        return ctx -> checkPermission(ctx, permission, def);
-    }
-
-    public static OptionalInt checkPermissionInteger(Player player, Identifier permission) {
-        if (IS_LOADED) {
-            var res = player.checkPermission(PermissionNode.ofInteger(permission));
-            if (res != null) {
-                return OptionalInt.of(res);
-            }
-        }
-
-        if (IS_LOADED_LEGACY) {
-            var string = Options.get(player, permission.toShortLanguageKey().replace('/', '.'));
-            if (string.isPresent()) {
-                try {
-                    return OptionalInt.of(Integer.parseInt(string.get()));
-                } catch(Throwable e){
-                    // Ignored
-                }
-            }
-        }
-
         return OptionalInt.empty();
     }
 }

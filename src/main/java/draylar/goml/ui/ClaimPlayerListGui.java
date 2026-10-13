@@ -1,6 +1,5 @@
 package draylar.goml.ui;
 
-import com.mojang.authlib.GameProfile;
 import draylar.goml.api.Claim;
 import draylar.goml.api.group.PlayerGroup;
 import draylar.goml.registry.GOMLTextures;
@@ -13,7 +12,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.world.item.Items;
 
 @ApiStatus.Internal
@@ -28,6 +27,7 @@ public class ClaimPlayerListGui extends GenericPlayerListGui {
     public ClaimPlayerListGui(ServerPlayer player, Claim claim, boolean canModifyTrusted, boolean canModifyOwners, boolean isAdmin, @Nullable Runnable onClose) {
         super(player, onClose);
         this.claim = claim;
+        bindClaim(claim, false);
         this.setTitle(Component.translatable("text.goml.gui.player_list.title"));
         this.canModifyOwners = canModifyOwners;
         this.canModifyTrusted = canModifyTrusted;
@@ -61,6 +61,7 @@ public class ClaimPlayerListGui extends GenericPlayerListGui {
             builder.addLoreLine(Component.translatable("text.goml.gui.click_to_remove"));
             builder.setCallback(() -> {
                 playClickSound(player);
+                if (!hasClaimAccess() || !claim.canManage(player)) return;
                 this.claim.untrust(group);
                 this.updateDisplay();
             });
@@ -86,20 +87,22 @@ public class ClaimPlayerListGui extends GenericPlayerListGui {
             case 5 -> this.canModifyTrusted
                     ? DisplayElement.of(new GuiElementBuilder(Items.PLAYER_HEAD)
                     .setName(Component.translatable("text.goml.gui.player_list.add_player").withStyle(ChatFormatting.GREEN))
-                    .setProfileSkinTexture(GOMLTextures.GUI_ADD)
+                    .setSkullOwner(GOMLTextures.GUI_ADD)
                     .setCallback(() -> {
                         playClickSound(this.player);
                         this.ignoreCloseCallback = true;
                         this.close(true);
                         this.ignoreCloseCallback = false;
-                        new GenericPlayerAndGroupSelectionGui(
+                        var selector = new GenericPlayerAndGroupSelectionGui(
                                 this.player,
                                 Component.translatable("text.goml.gui.player_add_gui.title"),
-                                (p) -> !this.claim.hasDirectPermission(p.id()),
+                                (p) -> !this.claim.hasDirectPermission(p.getId()),
                                 (p) -> !this.claim.getGroups().contains(p),
-                                (p) -> this.claim.trust(p.id()),
-                                this.claim::trust,
-                                this::refreshOpen).updateAndOpen();
+                                (p) -> { if (hasClaimAccess() && claim.canManage(player)) this.claim.trust(p.getId()); },
+                                (group) -> { if (hasClaimAccess() && claim.canManage(player)) this.claim.trust(group); },
+                                this::refreshOpen);
+                        selector.bindClaim(claim, true);
+                        selector.updateAndOpen();
                     }))
                     : DisplayElement.filler();
             default -> super.getNavElement(id);
@@ -107,13 +110,13 @@ public class ClaimPlayerListGui extends GenericPlayerListGui {
     }
 
     @Override
-    protected void modifyBuilder(GuiElementBuilder builder, Optional<NameAndId> optional, UUID uuid) {
+    protected void modifyBuilder(GuiElementBuilder builder, Optional<GameProfile> optional, UUID uuid) {
         var exist = optional.isPresent();
         var gameProfile = exist ? optional.get() : null;
         var isOwner = this.claim.isOwner(uuid);
         var canRemove = isOwner ? this.canModifyOwners : this.canModifyTrusted;
 
-        builder.setName(Component.literal(exist ? gameProfile.name() : uuid.toString())
+        builder.setName(Component.literal(exist ? gameProfile.getName() : uuid.toString())
                 .withStyle(isOwner ? ChatFormatting.GOLD : ChatFormatting.WHITE).append(isOwner
                         ? Component.literal(" (").withStyle(ChatFormatting.DARK_GRAY)
                         .append(Component.translatable("text.goml.owner").withStyle(ChatFormatting.WHITE))
@@ -125,7 +128,11 @@ public class ClaimPlayerListGui extends GenericPlayerListGui {
             builder.addLoreLine(Component.translatable("text.goml.gui.click_to_remove"));
             builder.setCallback(() -> {
                 playClickSound(player);
-                (isOwner ? this.claim.getOwners() : this.claim.getTrusted()).remove(uuid);
+                if (!hasClaimAccess() || !claim.canManage(player)) return;
+                if (isOwner) {
+                    if (!draylar.goml.api.ClaimUtils.isInAdminMode(player)) return;
+                    claim.removeOwner(uuid);
+                } else claim.untrust(uuid);
                 this.updateDisplay();
             });
         }

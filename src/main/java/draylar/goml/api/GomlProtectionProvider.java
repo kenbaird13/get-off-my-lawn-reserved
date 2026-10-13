@@ -1,11 +1,10 @@
 package draylar.goml.api;
 
-import com.mojang.authlib.GameProfile;
 import draylar.goml.GetOffMyLawn;
 import draylar.goml.registry.GOMLBlocks;
 import eu.pb4.common.protection.api.ProtectionProvider;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.players.NameAndId;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
@@ -24,7 +23,7 @@ public final class GomlProtectionProvider implements ProtectionProvider {
         if (world.getServer() == null) {
             return false;
         }
-        return ClaimUtils.getClaimsAt(world, pos).isNotEmpty();
+        return ClaimUtils.getActiveClaimsAt(world, pos).isNotEmpty();
     }
 
     @Override
@@ -32,11 +31,11 @@ public final class GomlProtectionProvider implements ProtectionProvider {
         if (world.getServer() == null) {
             return false;
         }
-        return ClaimUtils.getClaimsInBox(world, BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ)).isNotEmpty();
+        return ClaimUtils.getActiveClaimsInBox(world, BlockPos.containing(box.minX, box.minY, box.minZ), BlockPos.containing(box.maxX, box.maxY, box.maxZ)).isNotEmpty();
     }
 
     @Override
-    public boolean canBreakBlock(Level world, BlockPos pos,NameAndId profile, @Nullable Player player) {
+    public boolean canBreakBlock(Level world, BlockPos pos,GameProfile profile, @Nullable Player player) {
         if (world.getServer() == null) {
             return true;
         }
@@ -44,13 +43,13 @@ public final class GomlProtectionProvider implements ProtectionProvider {
         if (player != null) {
             return ClaimUtils.canModify(world, pos, player);
         } else {
-            var claims = ClaimUtils.getClaimsAt(world, pos);
-            return claims.isEmpty() || claims.anyMatch((c) -> c.getValue().hasPermission(profile.id()));
+            var claims = ClaimUtils.getActiveClaimsAt(world, pos);
+            return claims.isEmpty() || claims.anyMatch((c) -> c.getValue().hasPermission(profile.getId()));
         }
     }
 
     @Override
-    public boolean canExplodeBlock(Level world, BlockPos pos, Explosion explosion, NameAndId profile, @Nullable Player player) {
+    public boolean canExplodeBlock(Level world, BlockPos pos, Explosion explosion, GameProfile profile, @Nullable Player player) {
         if (world.getServer() == null) {
             return true;
         }
@@ -58,12 +57,12 @@ public final class GomlProtectionProvider implements ProtectionProvider {
     }
 
     @Override
-    public boolean canPlaceBlock(Level world, BlockPos pos, NameAndId profile, @Nullable Player player) {
+    public boolean canPlaceBlock(Level world, BlockPos pos, GameProfile profile, @Nullable Player player) {
         return this.canBreakBlock(world, pos, profile, player);
     }
 
     @Override
-    public boolean canInteractBlock(Level world, BlockPos pos, NameAndId profile, @Nullable Player player) {
+    public boolean canInteractBlock(Level world, BlockPos pos, GameProfile profile, @Nullable Player player) {
         if (world.getServer() == null) {
             return true;
         }
@@ -71,7 +70,7 @@ public final class GomlProtectionProvider implements ProtectionProvider {
     }
 
     @Override
-    public boolean canInteractEntity(Level world, Entity entity, NameAndId profile, @Nullable Player player) {
+    public boolean canInteractEntity(Level world, Entity entity, GameProfile profile, @Nullable Player player) {
         if (world.getServer() == null) {
             return true;
         }
@@ -79,13 +78,13 @@ public final class GomlProtectionProvider implements ProtectionProvider {
     }
 
     @Override
-    public boolean canDamageEntity(Level world, Entity entity, NameAndId profile, @Nullable Player player) {
+    public boolean canDamageEntity(Level world, Entity entity, GameProfile profile, @Nullable Player player) {
         if (world.getServer() == null) {
             return true;
         }
 
         if (entity instanceof Player attackedPlayer) {
-            var claims = ClaimUtils.getClaimsAt(world, entity.blockPosition());
+            var claims = ClaimUtils.getActiveClaimsAt(world, entity.blockPosition());
 
             if (claims.isEmpty()) {
                 return true;
@@ -106,8 +105,8 @@ public final class GomlProtectionProvider implements ProtectionProvider {
                         obj.setValue(switch (claim.getData(GOMLBlocks.PVP_ARENA.getFirst().key)) {
                             case EVERYONE -> true;
                             case DISABLED -> player != null && ClaimUtils.isInAdminMode(player);
-                            case TRUSTED -> claim.hasPermission(profile.id()) && claim.hasPermission(attackedPlayer);
-                            case UNTRUSTED -> !claim.hasPermission(profile.id()) && !claim.hasPermission(attackedPlayer);
+                            case TRUSTED -> claim.hasPermission(profile.getId()) && claim.hasPermission(attackedPlayer);
+                            case UNTRUSTED -> !claim.hasPermission(profile.getId()) && !claim.hasPermission(attackedPlayer);
                         });
                     });
 

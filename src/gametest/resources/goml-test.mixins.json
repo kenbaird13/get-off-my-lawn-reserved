@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "draylar.goml.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["TestServerServicesAccess"],
+  "injectors": { "defaultRequire": 1 }
+}

@@ -3,20 +3,20 @@ package draylar.goml.api;
 import draylar.goml.other.LegacyNbtHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.Identifier;
-import net.minecraft.util.Util;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.Util;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public record DataKey<T>(Identifier key, T defaultValue, Function<T, Tag> serializer, Function<Tag, T> deserializer, @Nullable Supplier<T> defaultSupplier) {
-    public DataKey(Identifier key, T defaultValue, Function<T, Tag> serializer, Function<Tag, T> deserializer) {
+public record DataKey<T>(ResourceLocation key, T defaultValue, Function<T, Tag> serializer, Function<Tag, T> deserializer, @Nullable Supplier<T> defaultSupplier) {
+    public DataKey(ResourceLocation key, T defaultValue, Function<T, Tag> serializer, Function<Tag, T> deserializer) {
         this(key, defaultValue, serializer, deserializer, () -> defaultValue);
     }
 
-    private static final Map<Identifier, DataKey<?>> REGISTRY = new HashMap<>();
+    private static final Map<ResourceLocation, DataKey<?>> REGISTRY = new HashMap<>();
 
     public DataKey {
         if (REGISTRY.containsKey(key)) {
@@ -26,7 +26,7 @@ public record DataKey<T>(Identifier key, T defaultValue, Function<T, Tag> serial
         REGISTRY.put(key, this);
     }
 
-    public static <T, C extends Collection<T>> DataKey<C> ofCollection(Identifier key, Supplier<C> collectionCreator, Function<T, Tag> serializer, Function<Tag, T> deserializer) {
+    public static <T, C extends Collection<T>> DataKey<C> ofCollection(ResourceLocation key, Supplier<C> collectionCreator, Function<T, Tag> serializer, Function<Tag, T> deserializer) {
         return new DataKey<>(key, collectionCreator.get(), (list) -> {
             var nbt = new ListTag();
 
@@ -40,7 +40,7 @@ public record DataKey<T>(Identifier key, T defaultValue, Function<T, Tag> serial
         }, (nbt) -> {
             var list = collectionCreator.get();
 
-            if (nbt instanceof CollectionTag nbtList)
+            if (nbt instanceof ListTag nbtList)
             for (var i : nbtList) {
                 if (i != null) {
                     list.add(deserializer.apply(i));
@@ -51,46 +51,46 @@ public record DataKey<T>(Identifier key, T defaultValue, Function<T, Tag> serial
         }, collectionCreator);
     }
 
-    public static DataKey<String> ofString(Identifier key, String defaultValue) {
-        return new DataKey<>(key, defaultValue, StringTag::valueOf, (nbt) -> nbt instanceof StringTag nbtString ? nbtString.value() : defaultValue);
+    public static DataKey<String> ofString(ResourceLocation key, String defaultValue) {
+        return new DataKey<>(key, defaultValue, StringTag::valueOf, (nbt) -> nbt instanceof StringTag nbtString ? nbtString.getAsString() : defaultValue);
     }
 
-    public static DataKey<Boolean> ofBoolean(Identifier key, boolean defaultValue) {
-        return new DataKey<>(key, defaultValue, ByteTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.byteValue() > 0 : defaultValue);
+    public static DataKey<Boolean> ofBoolean(ResourceLocation key, boolean defaultValue) {
+        return new DataKey<>(key, defaultValue, ByteTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.getAsByte() > 0 : defaultValue);
     }
 
-    public static DataKey<Integer> ofInt(Identifier key, int defaultValue) {
-        return new DataKey<>(key, defaultValue, IntTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.intValue() : defaultValue);
+    public static DataKey<Integer> ofInt(ResourceLocation key, int defaultValue) {
+        return new DataKey<>(key, defaultValue, IntTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.getAsInt() : defaultValue);
     }
 
-    public static DataKey<UUID> ofUuid(Identifier key) {
+    public static DataKey<UUID> ofUuid(ResourceLocation key) {
         return new DataKey<>(key, Util.NIL_UUID, LegacyNbtHelper::fromUuid, LegacyNbtHelper::toUuid);
     }
 
-    public static DataKey<Set<UUID>> ofUuidSet(Identifier key) {
+    public static DataKey<Set<UUID>> ofUuidSet(ResourceLocation key) {
         return ofCollection(key, HashSet::new, LegacyNbtHelper::fromUuid, LegacyNbtHelper::toUuid);
     }
 
-    public static DataKey<Double> ofDouble(Identifier key, double defaultValue) {
-        return new DataKey<>(key, defaultValue, DoubleTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.doubleValue() : defaultValue);
+    public static DataKey<Double> ofDouble(ResourceLocation key, double defaultValue) {
+        return new DataKey<>(key, defaultValue, DoubleTag::valueOf, (nbt) -> nbt instanceof NumericTag nbtNumber ? nbtNumber.getAsDouble() : defaultValue);
     }
 
-    public static DataKey<BlockPos> ofPos(Identifier key) {
+    public static DataKey<BlockPos> ofPos(ResourceLocation key) {
         return new DataKey<>(key, null, LegacyNbtHelper::fromBlockPos, (nbt) -> nbt instanceof CompoundTag compound ? LegacyNbtHelper.toBlockPos(compound) : null);
     }
 
     @Nullable
-    public static DataKey<?> getKey(Identifier key) {
+    public static DataKey<?> getKey(ResourceLocation key) {
         return REGISTRY.get(key);
     }
 
-    public static Collection<Identifier> keys() {
+    public static Collection<ResourceLocation> keys() {
         return REGISTRY.keySet();
     }
 
-    public static <T extends Enum<T>> DataKey<T> ofEnum(Identifier key, Class<T> tClass, T defaultValue) {
+    public static <T extends Enum<T>> DataKey<T> ofEnum(ResourceLocation key, Class<T> tClass, T defaultValue) {
         return new DataKey<>(key, defaultValue, (i) -> StringTag.valueOf(i.name()), (nbt) -> {
-            var value = nbt instanceof StringTag string ? Enum.valueOf(tClass, string.value()) : null;
+            var value = nbt instanceof StringTag string ? Enum.valueOf(tClass, string.getAsString()) : null;
             return value != null ? value : defaultValue;
         });
     }

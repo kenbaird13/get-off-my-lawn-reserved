@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public class BotaniaItemLaputaShardMixin {
     @Redirect(method = {"spawnNextBurst", "updateBurst"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;getBlockState(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"))
     private BlockState goml_canReplace(Level instance, BlockPos pos) {
-        if (ClaimUtils.getClaimsAt(instance, pos).isNotEmpty()) {
+        if (ClaimUtils.getActiveClaimsAt(instance, pos).isNotEmpty()) {
             return Blocks.BEDROCK.defaultBlockState();
         }
 

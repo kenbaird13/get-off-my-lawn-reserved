@@ -1,14 +1,8 @@
 package draylar.goml.mixin;
 
-import com.jamieswhiteshirt.rtree3i.Entry;
-import com.jamieswhiteshirt.rtree3i.Selection;
-import draylar.goml.api.ClaimBox;
-import draylar.goml.api.Claim;
 import draylar.goml.api.ClaimUtils;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.Item;
@@ -39,7 +33,7 @@ public class BucketItemMixin extends Item {
     }
 
     @Inject(at = @At("HEAD"), method = "use", cancellable = true)
-    private void goml_preventBucketUsageInClaims(Level world, Player user, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
+    private void goml_preventBucketUsageInClaims(Level world, Player user, InteractionHand hand, CallbackInfoReturnable<net.minecraft.world.InteractionResultHolder<net.minecraft.world.item.ItemStack>> cir) {
         if (world.isClientSide()) {
             return;
         }
@@ -47,8 +41,8 @@ public class BucketItemMixin extends Item {
         HitResult hitResult = getPlayerPOVHitResult(world, user, this.content == Fluids.EMPTY ? ClipContext.Fluid.SOURCE_ONLY : ClipContext.Fluid.NONE);
 
         if(!ClaimUtils.canModify(world, ((BlockHitResult) hitResult).getBlockPos(), user)) {
-            user.sendOverlayMessage(Component.literal("This block is protected by a claim."));
-            cir.setReturnValue(InteractionResult.FAIL);
+            user.displayClientMessage(Component.literal("This block is protected by a claim."), true);
+            cir.setReturnValue(net.minecraft.world.InteractionResultHolder.fail(user.getItemInHand(hand)));
         }
     }
 }

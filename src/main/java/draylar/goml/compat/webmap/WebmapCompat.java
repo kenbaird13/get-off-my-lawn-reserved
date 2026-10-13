@@ -28,7 +28,7 @@ public abstract class WebmapCompat {
     private static final ConcurrentHashMap<Claim, ClaimMarker> MARKERS = new ConcurrentHashMap<>();
 
     private static MinecraftServer _server;
-    
+
     protected WebmapCompat() {}
 
     protected abstract void onIntegrationRegistered();
@@ -65,7 +65,7 @@ public abstract class WebmapCompat {
 
     /**
      * Create claim marker on all maps for the specified claim
-     * 
+     *
      * @param claim the claim to create a marker for
      */
     public static final void createClaimMarker(Claim claim) {
@@ -86,7 +86,7 @@ public abstract class WebmapCompat {
 
     /**
      * Remove markers from all maps for the specified claim
-     * 
+     *
      * @param claim the claim to remove markers for
      */
     public static final void deleteClaimMarker(Claim claim) {
@@ -100,7 +100,7 @@ public abstract class WebmapCompat {
 
     /**
      * Refresh and update the specified claim's markers on all maps
-     * 
+     *
      * @param claim the claim to update markers for
      */
     public static final void updateClaimMarker(Claim claim) {
@@ -114,8 +114,9 @@ public abstract class WebmapCompat {
                 return;
             }
 
-            MARKERS.put(claim, marker);
-            INTEGRATIONS.forEach(integration -> integration.handleMarkerUpdated(marker));
+            var previous = MARKERS.put(claim, marker);
+            if (previous == null) INTEGRATIONS.forEach(integration -> integration.handleMarkerCreated(marker));
+            else INTEGRATIONS.forEach(integration -> integration.handleMarkerUpdated(marker));
         });
     }
 
@@ -169,7 +170,7 @@ public abstract class WebmapCompat {
 
     // Construct claim marker using claim
     private static final @Nullable ClaimMarker buildMarker(Claim claim) {
-        if (claim == null || _server == null) {
+        if (claim == null || _server == null || !claim.isProtectionActive()) {
             return null;
         }
 

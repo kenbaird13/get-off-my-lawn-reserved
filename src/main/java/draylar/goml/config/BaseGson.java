@@ -12,7 +12,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.Brightness;
@@ -28,9 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Function;
 
 public class BaseGson {
@@ -38,7 +36,7 @@ public class BaseGson {
 
     public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
             .enableComplexMapKeySerialization()
-            .registerTypeHierarchyAdapter(Identifier.class, new CodecSerializer<>(Identifier.CODEC))
+            .registerTypeHierarchyAdapter(ResourceLocation.class, new CodecSerializer<>(ResourceLocation.CODEC))
 
             .registerTypeHierarchyAdapter(Item.class, new RegistrySerializer<>(BuiltInRegistries.ITEM))
             .registerTypeHierarchyAdapter(Block.class, new RegistrySerializer<>(BuiltInRegistries.BLOCK))
@@ -69,7 +67,7 @@ public class BaseGson {
             if (jsonElement.isJsonObject()) {
                 return ItemStack.CODEC.decode(RegistryOps.create(JsonOps.INSTANCE, GLOBAL_REGISTRIES), jsonElement).result().orElse(Pair.of(ItemStack.EMPTY, null)).getFirst();
             } else {
-                return BuiltInRegistries.ITEM.getValue(Identifier.tryParse(jsonElement.getAsString())).getDefaultInstance();
+                return BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(jsonElement.getAsString())).getDefaultInstance();
             }
         }
 
@@ -102,7 +100,7 @@ public class BaseGson {
         @Override
         public T deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
             if (json.isJsonPrimitive()) {
-                return this.registry.getValue(Identifier.tryParse(json.getAsString()));
+                return this.registry.get(ResourceLocation.tryParse(json.getAsString()));
             }
             return null;
         }

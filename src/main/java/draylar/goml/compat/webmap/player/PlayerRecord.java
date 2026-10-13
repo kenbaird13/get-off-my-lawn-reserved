@@ -21,9 +21,9 @@ import java.util.UUID;
 
 /**
  * Represents a player record with their name and head icon for web map display.
- * 
+ *
  * <p>If the player or block cannot be resolved, placeholders are used.
- * 
+ *
  * @see PlayerHeadIcon
  */
 public class PlayerRecord {
@@ -37,7 +37,7 @@ public class PlayerRecord {
 
     /**
      * Explicitly defines name and icon, cannot be updated after construction.
-     * 
+     *
      * @param playerIcon the player head icon
      * @param playerName the player name, or null for placeholder
      */
@@ -47,7 +47,7 @@ public class PlayerRecord {
     }
     /**
      * Gets player name and icon from server player registry.
-     * 
+     *
      * @param uuid the player's UUID
      * @param server the Minecraft server instance
      * @param name the fallback name if lookup fails, or null
@@ -69,7 +69,7 @@ public class PlayerRecord {
     }
     /**
      * Gets icon for {@link PolymerHeadBlock} and sets display name.
-     * 
+     *
      * @param headBlock the polymer head block
      * @param displayName the display name, or null for placeholder
      */
@@ -91,7 +91,7 @@ public class PlayerRecord {
     public PlayerHeadIcon getHeadIcon() {
         return this.playerIcon;
     }
-    
+
     /**
      * Resolves the player's name and icon using Minecraft API. Has no effect if not constructed with player UUID (i.e with PolymerHeadBlock).
      */
@@ -107,7 +107,7 @@ public class PlayerRecord {
                     json = openConnection(URI.create(PROFILE_LOOKUP_URL + this.uuid));
                     PlayerRecordCache.putProfile(this.uuid, json);
                 }
-                
+
                 Gson gson = new Gson();
                 Map<String, Object> profile = gson.fromJson(json, new TypeToken<Map<String, Object>>(){}.getType());
 
@@ -132,8 +132,8 @@ public class PlayerRecord {
             }
 
             // If name is still null, attempt to retrieve it from UserCache
-            server.services().nameToIdCache().get(uuid).ifPresent(
-                profile -> this.name = profile.name()
+            server.getProfileCache().get(uuid).ifPresent(
+                profile -> this.name = profile.getName()
             );
         }
     }

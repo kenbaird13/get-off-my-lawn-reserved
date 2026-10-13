@@ -5,10 +5,8 @@ import draylar.goml.api.Claim;
 import draylar.goml.api.DataKey;
 import draylar.goml.block.ClaimAugmentBlock;
 import draylar.goml.other.StatusEnum;
-import draylar.goml.ui.GenericPlayerListGui;
 import draylar.goml.ui.PagedGui;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
-import eu.pb4.sgui.api.gui.SimpleGui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -33,10 +31,10 @@ public class ExplosionControllerAugmentBlock extends ClaimAugmentBlock {
     @Override
     public void openSettings(Claim claim, ServerPlayer player, @Nullable Runnable closeCallback) {
 
-        var gui = new SimpleGui(MenuType.HOPPER, player, false) {
+        var gui = new draylar.goml.ui.ClaimGui(claim, MenuType.HOPPER, player, true) {
             @Override
             public void onManualClose() {
-                if (closeCallback != null) {
+                if (closeCallback != null && hasAccess()) {
                     closeCallback.run();
                 }
             }

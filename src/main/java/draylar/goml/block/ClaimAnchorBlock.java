@@ -9,7 +9,7 @@ import draylar.goml.item.UpgradeKitItem;
 import draylar.goml.registry.GOMLEntities;
 import draylar.goml.registry.GOMLTextures;
 import eu.pb4.polymer.core.api.block.PolymerHeadBlock;
-import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,7 +17,6 @@ import java.util.Collections;
 import java.util.function.IntSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -61,7 +60,7 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
             Claim claimInfo = new Claim(world.getServer(), Collections.singleton(placer.getUUID()), Collections.emptySet(), pos);
             claimInfo.internal_setIcon(new ItemStack(itemStack.getItem()));
             claimInfo.internal_setType(this);
-            claimInfo.internal_setWorld(world.dimension().identifier());
+            claimInfo.internal_setWorld(world.dimension().location());
             var box = ClaimUtils.createClaimBox(pos, radius);
             claimInfo.internal_setClaimBox(box);
             GetOffMyLawn.CLAIM.get(world).add(claimInfo);
@@ -87,6 +86,14 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
     }
 
     @Override
+    public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean moved) {
+        if (!world.isClientSide() && state.getBlock() != newState.getBlock()
+                && world.getBlockEntity(pos) instanceof ClaimAnchorBlockEntity be && be.getClaim() != null
+                && !be.getClaim().isReplacingAnchor()) be.getClaim().destroy();
+        super.onRemove(state, world, pos, newState, moved);
+    }
+
+    @Override
     public BlockState playerWillDestroy(Level world, BlockPos pos, BlockState state, Player player) {
         if (world == null || world.isClientSide()) {
             return state;
@@ -105,7 +112,7 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
     protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player playerEntity, BlockHitResult hit) {
         if (playerEntity instanceof ServerPlayer player && !player.isShiftKeyDown() && !(player.getMainHandItem().getItem() instanceof UpgradeKitItem)) {
             var blockEntity = world.getBlockEntity(pos, GOMLEntities.CLAIM_ANCHOR);
-            blockEntity.ifPresent(claimAnchorBlockEntity -> claimAnchorBlockEntity.getClaim().openUi(player));
+            blockEntity.ifPresent(anchor -> { if (anchor.getClaim() != null) anchor.getClaim().openUi(player); });
 
             return InteractionResult.SUCCESS;
         }
@@ -118,7 +125,8 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
 
     @Override
     public float getDestroyProgress(BlockState state, Player player, BlockGetter world, BlockPos pos) {
-        if (ClaimUtils.isInAdminMode(player) || (world instanceof ServerLevel serverWorld && ClaimUtils.getClaimsAt(serverWorld, pos).anyMatch(x -> x.getValue().isOwner(player)))) {
+        if (ClaimUtils.isInAdminMode(player) || (world.getBlockEntity(pos) instanceof ClaimAnchorBlockEntity be
+                && be.getClaim() != null && (!be.getClaim().isProtectionActive() || be.getClaim().isOwner(player)))) {
             return super.getDestroyProgress(state, player, world, pos);
         } else {
             return 0;
@@ -138,7 +146,7 @@ public class ClaimAnchorBlock extends Block implements EntityBlock, PolymerHeadB
     }
 
     @Override
-    public String getPolymerSkinValue(BlockState state, BlockPos pos, PacketContext player) {
+    public String getPolymerSkinValue(BlockState state, BlockPos pos, ServerPlayer player) {
         return this.texture;
     }
 }

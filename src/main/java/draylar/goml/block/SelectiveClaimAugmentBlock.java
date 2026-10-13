@@ -6,7 +6,6 @@ import draylar.goml.api.DataKey;
 import draylar.goml.other.StatusEnum;
 import draylar.goml.ui.PagedGui;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
-import eu.pb4.sgui.api.gui.SimpleGui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,6 +33,7 @@ public class SelectiveClaimAugmentBlock extends ClaimAugmentBlock {
     }
 
     protected boolean canApply(Claim claim, Player player) {
+        if (!claim.isProtectionActive()) return false;
         var mode = claim.getData(key);
         return mode == StatusEnum.TargetPlayer.EVERYONE
                 || (mode == StatusEnum.TargetPlayer.TRUSTED && claim.hasPermission(player))
@@ -57,10 +57,10 @@ public class SelectiveClaimAugmentBlock extends ClaimAugmentBlock {
     @Override
     public void openSettings(Claim claim, ServerPlayer player, @Nullable Runnable closeCallback) {
 
-        var gui = new SimpleGui(MenuType.HOPPER, player, false) {
+        var gui = new draylar.goml.ui.ClaimGui(claim, MenuType.HOPPER, player, true) {
             @Override
             public void onManualClose() {
-                if (closeCallback != null) {
+                if (closeCallback != null && hasAccess()) {
                     closeCallback.run();
                 }
             }
@@ -79,6 +79,7 @@ public class SelectiveClaimAugmentBlock extends ClaimAugmentBlock {
                         var mode = currentMode.getNext();
                         claim.setData(key, mode);
                         for (var p : claim.getPlayersIn(player.level().getServer())) {
+                            if (!claim.isProtectionActive()) continue;
                             this.removeEffect(player);
 
                             if (this.canApply(claim, p)) {

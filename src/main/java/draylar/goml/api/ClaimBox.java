@@ -1,8 +1,8 @@
 package draylar.goml.api;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
+import draylar.goml.other.nbt.NbtInput;
+import draylar.goml.other.nbt.NbtOutput;
 import net.minecraft.world.phys.AABB;
 
 public record ClaimBox(com.jamieswhiteshirt.rtree3i.Box rtree3iBox, AABB minecraftBox, BlockPos origin, int radius, int radiusY, boolean noShift) {
@@ -61,7 +61,7 @@ public record ClaimBox(com.jamieswhiteshirt.rtree3i.Box rtree3iBox, AABB minecra
         return this.radius;
     }
 
-    public static ClaimBox readData(ValueInput view, int i) {
+    public static ClaimBox readData(NbtInput view, int i) {
         BlockPos originPos = BlockPos.of(view.getLongOr("OriginPos", 0));
         var radius = view.getIntOr("Radius", 0);
         var height = view.getIntOr("Height", radius);
@@ -71,7 +71,7 @@ public record ClaimBox(com.jamieswhiteshirt.rtree3i.Box rtree3iBox, AABB minecra
         return EMPTY;
     }
 
-    public void writeData(ValueOutput view) {
+    public void writeData(NbtOutput view) {
         view.putLong("OriginPos", this.getOrigin().asLong());
         view.putInt("Radius", this.getRadius());
         view.putInt("Height", this.getY());

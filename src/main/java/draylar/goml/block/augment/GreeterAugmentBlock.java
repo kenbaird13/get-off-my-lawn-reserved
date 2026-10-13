@@ -6,7 +6,6 @@ import draylar.goml.api.DataKey;
 import draylar.goml.block.ClaimAugmentBlock;
 import draylar.goml.ui.PagedGui;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
-import eu.pb4.sgui.api.gui.AnvilInputGui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -41,12 +40,21 @@ public class GreeterAugmentBlock extends ClaimAugmentBlock {
 
     @Override
     public void openSettings(Claim claim, ServerPlayer player, @Nullable Runnable closeCallback) {
+        if (!claim.canManage(player)) return;
+        long revision = claim.accessRevision();
         var currentInput = claim.getData(MESSAGE_KEY);
 
-        var ui = new AnvilInputGui(player, false) {
+        var ui = new draylar.goml.ui.CloseAwareAnvilGui(player, false) {
+            private boolean hasAccess() { return claim.canManage(player) && claim.accessRevision() == revision; }
+            @Override public boolean onAnyClick(int index, eu.pb4.sgui.api.ClickType type, net.minecraft.world.inventory.ClickType action) {
+                if (!hasAccess()) { close(false); return false; }
+                return super.onAnyClick(index, type, action);
+            }
+            @Override public void onTick() { if (!hasAccess()) close(false); }
+            @Override public void onClose() { claim.unregisterMenu(this); super.onClose(); }
             @Override
             public void onManualClose() {
-                if (closeCallback != null) {
+                if (closeCallback != null && hasAccess()) {
                     closeCallback.run();
                 }
             }
@@ -73,6 +81,7 @@ public class GreeterAugmentBlock extends ClaimAugmentBlock {
                         })
         );
 
+        claim.registerMenu(ui);
         ui.open();
     }
 }

@@ -9,8 +9,6 @@ import java.util.List;
 import java.util.function.Function;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
@@ -31,7 +29,7 @@ public class GOMLItems {
 
     private static <T extends Item> T register(String name, Function<Item.Properties, T> item) {
         var id = GetOffMyLawn.id(name);
-        var value = item.apply(new Item.Properties().setId(ResourceKey.create(Registries.ITEM, id)));
+        var value = item.apply(new Item.Properties());
         BASE_ITEMS.add(value);
         return Registry.register(BuiltInRegistries.ITEM, id, value);
     }

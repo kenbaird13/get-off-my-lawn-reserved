@@ -1,8 +1,6 @@
 package draylar.goml.other;
 
-import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -10,7 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.util.Util;
+import net.minecraft.Util;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
@@ -28,66 +26,36 @@ public final class LegacyNbtHelper {
 
     @Nullable
     public static GameProfile toGameProfile(CompoundTag nbt) {
-        UUID uUID = nbt.contains("Id") ? nbt.read("Id", UUID_CODEC).orElse(Util.NIL_UUID) : Util.NIL_UUID;
-        String string = nbt.getStringOr("Name", "");
-
         try {
-            var map = ImmutableMultimap.<String, com.mojang.authlib.properties.Property>builder();
-            if (nbt.contains("Properties")) {
-                CompoundTag nbtCompound = nbt.getCompoundOrEmpty("Properties");
-
-                for (String string2 : nbtCompound.keySet()) {
-                    ListTag nbtList = nbtCompound.getListOrEmpty(string2);
-
-                    for (int i = 0; i < nbtList.size(); ++i) {
-                        CompoundTag nbtCompound2 = nbtList.getCompoundOrEmpty(i);
-                        String string3 = nbtCompound2.getStringOr("Value", "");
-                        if (nbtCompound2.contains("Signature")) {
-                            map.put(string2, new com.mojang.authlib.properties.Property(string2, string3, nbtCompound2.getStringOr("Signature", null)));
-                        } else {
-                            map.put(string2, new com.mojang.authlib.properties.Property(string2, string3));
-                        }
-                    }
+            var id = nbt.hasUUID("Id") ? nbt.getUUID("Id") : Util.NIL_UUID;
+            var profile = new GameProfile(id, nbt.getString("Name"));
+            var properties = nbt.getCompound("Properties");
+            for (var key : properties.getAllKeys()) {
+                for (var value : properties.getList(key, Tag.TAG_COMPOUND)) {
+                    var property = (CompoundTag) value;
+                    profile.getProperties().put(key, new com.mojang.authlib.properties.Property(key,
+                            property.getString("Value"), property.contains("Signature") ? property.getString("Signature") : null));
                 }
             }
-            return new GameProfile(uUID, string, new PropertyMap(map.build()));
-        } catch (Throwable var11) {
-            return null;
-        }
+            return profile;
+        } catch (IllegalArgumentException ex) { return null; }
     }
 
     public static CompoundTag writeGameProfile(CompoundTag nbt, GameProfile profile) {
-        if (!profile.name().isEmpty()) {
-            nbt.putString("Name", profile.name());
-        }
-
-        if (!profile.id().equals(Util.NIL_UUID)) {
-            nbt.store("Id", UUIDUtil.AUTHLIB_CODEC, profile.id());
-        }
-
-        if (!profile.properties().isEmpty()) {
-            CompoundTag nbtCompound = new CompoundTag();
-
-            for (String string : profile.properties().keySet()) {
-                ListTag nbtList = new ListTag();
-
-                for (com.mojang.authlib.properties.Property property : profile.properties().get(string)) {
-                    CompoundTag nbtCompound2 = new CompoundTag();
-                    nbtCompound2.putString("Value", property.value());
-                    String string2 = property.signature();
-                    if (string2 != null) {
-                        nbtCompound2.putString("Signature", string2);
-                    }
-
-                    nbtList.add(nbtCompound2);
-                }
-
-                nbtCompound.put(string, nbtList);
+        if (profile.getName() != null) nbt.putString("Name", profile.getName());
+        if (profile.getId() != null) nbt.putUUID("Id", profile.getId());
+        var properties = new CompoundTag();
+        for (var key : profile.getProperties().keySet()) {
+            var list = new ListTag();
+            for (var property : profile.getProperties().get(key)) {
+                var value = new CompoundTag();
+                value.putString("Value", property.value());
+                if (property.signature() != null) value.putString("Signature", property.signature());
+                list.add(value);
             }
-
-            nbt.put("Properties", nbtCompound);
+            properties.put(key, list);
         }
-
+        if (!properties.isEmpty()) nbt.put("Properties", properties);
         return nbt;
     }
 
@@ -111,7 +79,7 @@ public final class LegacyNbtHelper {
     }
 
     public static BlockPos toBlockPos(CompoundTag nbt) {
-        return new BlockPos(nbt.getIntOr("X", 0), nbt.getIntOr("Y", 0), nbt.getIntOr("Z", 0));
+        return new BlockPos(nbt.getInt("X"), nbt.getInt("Y"), nbt.getInt("Z"));
     }
 
     public static CompoundTag fromBlockPos(BlockPos pos) {

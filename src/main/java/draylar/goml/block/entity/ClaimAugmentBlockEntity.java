@@ -17,8 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
+import draylar.goml.other.nbt.NbtInput;
 
 public class ClaimAugmentBlockEntity extends BlockEntity implements PolymerObject {
 
@@ -69,28 +68,9 @@ public class ClaimAugmentBlockEntity extends BlockEntity implements PolymerObjec
         }
     }
 
-    @Override
-    public void preRemoveSideEffects(BlockPos pos, BlockState oldState) {
-        super.preRemoveSideEffects(pos, oldState);
-        if (this.level != null) {
-            this.remove();
-        }
-    }
 
-    @Override
-    protected void saveAdditional(ValueOutput view) {
-        if (this.claimPosition != null) {
-            view.putLong(CLAIM_POSITION_KEY, this.claimPosition.asLong());
-        }
-        if (this.parentPosition != null) {
-            view.putLong(PARENT_POSITION_KEY, this.parentPosition.asLong());
-        }
-
-        super.saveAdditional(view);
-    }
-
-    @Override
-    public void loadAdditional(ValueInput view) {
+    public void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+        var view = new NbtInput(tag, registries);
         this.claimPosition = view.getLong(CLAIM_POSITION_KEY).map(BlockPos::of).orElse(null);
 
         this.parentPosition = BlockPos.of(view.getLongOr(PARENT_POSITION_KEY, 0));
@@ -101,7 +81,7 @@ public class ClaimAugmentBlockEntity extends BlockEntity implements PolymerObjec
             }
         }
 
-        super.loadAdditional(view);
+        super.loadAdditional(tag, registries);
     }
 
     public void remove() {

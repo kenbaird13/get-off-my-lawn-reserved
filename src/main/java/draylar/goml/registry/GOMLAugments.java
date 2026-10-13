@@ -1,32 +1,29 @@
 package draylar.goml.registry;
 
-import com.google.common.collect.HashBiMap;
 import draylar.goml.api.Augment;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2ObjectOpenHashMap;
-import net.minecraft.resources.Identifier;
-import net.minecraft.util.Util;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class GOMLAugments {
-    private static final Map<Identifier, Augment> AUGMENTS = new HashMap<>();
-    private static final Map<Augment, Identifier> AUGMENT_IDS = new Reference2ObjectOpenHashMap<>();
+    private static final Map<ResourceLocation, Augment> AUGMENTS = new HashMap<>();
+    private static final Map<Augment, ResourceLocation> AUGMENT_IDS = new Reference2ObjectOpenHashMap<>();
 
 
     @Nullable
-    public static Augment get(Identifier identifier) {
+    public static Augment get(ResourceLocation identifier) {
         return AUGMENTS.get(identifier);
     }
 
-    public static Augment register(Identifier identifier, Augment augment) {
+    public static Augment register(ResourceLocation identifier, Augment augment) {
         AUGMENT_IDS.put(augment, identifier);
         return AUGMENTS.put(identifier, augment);
     }
 
-    public static Identifier getId(Augment augment) {
+    public static ResourceLocation getId(Augment augment) {
         return AUGMENT_IDS.get(augment);
     }
 }

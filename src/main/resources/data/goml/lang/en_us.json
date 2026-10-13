@@ -166,5 +166,23 @@
   "text.goml.webmap.label.unknown": "Unknown",
   "text.goml.webmap.label.owners": "Owner(s):",
   "text.goml.webmap.label.trusted": "Trusted:",
-  "text.goml.webmap.label.augments": "Augments:"
+  "text.goml.webmap.label.augments": "Augments:",
+
+  "text.goml.maintenance.title": "Claim maintenance",
+  "text.goml.maintenance.active": "Protected",
+  "text.goml.maintenance.overdue": "Overdue — protection disabled",
+  "text.goml.maintenance.exempt": "Protected — maintenance exempt",
+  "text.goml.maintenance.tier": "Anchor: %s",
+  "text.goml.maintenance.cost": "Payment: 1 × %s",
+  "text.goml.maintenance.period": "Interval: %s minutes of server ticking",
+  "text.goml.maintenance.remaining": "Next payment: %s min %s sec (game time)",
+  "text.goml.maintenance.pay": "Pay overdue claim and take ownership",
+  "text.goml.maintenance.pay_help": "Uses one payment item from your inventory and clears previous owners and trust.",
+  "text.goml.maintenance.paid": "Payment accepted. You are now the sole owner of this claim.",
+  "text.goml.maintenance.missing_item": "Payment requires one %s in your inventory.",
+  "text.goml.maintenance.unavailable": "This claim is not available for payment.",
+  "text.goml.maintenance.protected_anchor": "Another active claim protects this anchor.",
+  "text.goml.maintenance.overlap_owner_only": "Only an existing owner may pay an overlapping overdue claim.",
+  "text.goml.maintenance.overlap": "This claim conflicts with another claim under the current placement rules.",
+  "text.goml.maintenance.reload_failed": "Configuration reload failed; previous settings retained: %s"
 }

@@ -8,8 +8,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -27,7 +25,7 @@ public abstract class EntityMixin implements OriginOwner {
     @Unique
     private BlockPos originPos;
 
-    @Inject(method = "isInvulnerableToBase", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isInvulnerableTo", at = @At("HEAD"), cancellable = true)
     private void goml$isInvulnerable(DamageSource damageSource, CallbackInfoReturnable<Boolean> cir) {
         if (this.level.isClientSide()) {
             return;
@@ -39,15 +37,15 @@ public abstract class EntityMixin implements OriginOwner {
     }
 
     @Inject(method = "saveWithoutId", at = @At("TAIL"))
-    private void writeGomlNbt(ValueOutput view, CallbackInfo ci) {
+    private void writeGomlNbt(CompoundTag tag, CallbackInfoReturnable<CompoundTag> ci) {
         if (this.originPos != null) {
-            view.store("goml:origin", CompoundTag.CODEC, LegacyNbtHelper.fromBlockPos(this.originPos));
+            tag.put("goml:origin", LegacyNbtHelper.fromBlockPos(this.originPos));
         }
     }
 
     @Inject(method = "load", at = @At("TAIL"))
-    private void readGomlNbt(ValueInput view, CallbackInfo ci) {
-        this.originPos = view.read("goml:origin", CompoundTag.CODEC).map(LegacyNbtHelper::toBlockPos).orElse(null);
+    private void readGomlNbt(CompoundTag tag, CallbackInfo ci) {
+        this.originPos = tag.contains("goml:origin", net.minecraft.nbt.Tag.TAG_COMPOUND) ? LegacyNbtHelper.toBlockPos(tag.getCompound("goml:origin")) : null;
     }
 
     @Override

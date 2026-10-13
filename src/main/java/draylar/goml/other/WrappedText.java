@@ -9,12 +9,12 @@ import net.minecraft.network.chat.MutableComponent;
 public record WrappedText(Component text, TextNode node, String input) {
     public static WrappedText of(String input) {
         var val = TagParser.QUICK_TEXT_WITH_STF.parseNode(input);
-        return new WrappedText(val.toComponent(ParserContext.of(), true), val, input);
+        return new WrappedText(val.toText(ParserContext.of(), true), val, input);
     }
 
     public static WrappedText ofSafe(String input) {
         var val = TagParser.QUICK_TEXT_WITH_STF_SAFE.parseNode(input);
-        return new WrappedText(val.toComponent(ParserContext.of(), true), val, input);
+        return new WrappedText(val.toText(ParserContext.of(), true), val, input);
     }
 
     public MutableComponent mutableText() {

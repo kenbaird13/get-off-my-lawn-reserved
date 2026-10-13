@@ -10,15 +10,13 @@ import draylar.goml.registry.GOMLTextures;
 import eu.pb4.polymer.core.api.block.PolymerHeadBlock;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
-import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.function.BooleanSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -76,7 +74,7 @@ public class ClaimAugmentBlock extends Block implements Augment, EntityBlock, Po
             if (blockEntity.isPresent() && blockEntity.get().getClaim() != null) {
                 var claim = blockEntity.get().getClaim();
 
-                if (claim != null && claim.isOwner(player)) {
+                if (claim.canManage(player)) {
                     this.openSettings(claim, player, null);
                 }
 
@@ -145,12 +143,10 @@ public class ClaimAugmentBlock extends Block implements Augment, EntityBlock, Po
     }
 
     @Override
-    public void affectNeighborsAfterRemoval(BlockState state, ServerLevel world, BlockPos pos, boolean moved) {
-        if (world == null || world.isClientSide()) {
-            return;
-        }
-
-        super.affectNeighborsAfterRemoval(state, world, pos, moved);
+    public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean moved) {
+        if (!world.isClientSide() && state.getBlock() != newState.getBlock()
+                && world.getBlockEntity(pos) instanceof ClaimAugmentBlockEntity be) be.remove();
+        super.onRemove(state, world, pos, newState, moved);
     }
 
     @Override
@@ -169,7 +165,8 @@ public class ClaimAugmentBlock extends Block implements Augment, EntityBlock, Po
 
     @Override
     public float getDestroyProgress(BlockState state, Player player, BlockGetter world, BlockPos pos) {
-        if (ClaimUtils.isInAdminMode(player) || (world instanceof ServerLevel serverWorld && ClaimUtils.getClaimsAt(serverWorld, pos).anyMatch(x -> x.getValue().isOwner(player)))) {
+        if (ClaimUtils.isInAdminMode(player) || (world.getBlockEntity(pos) instanceof ClaimAugmentBlockEntity be
+                && be.getClaim() != null && (!be.getClaim().isProtectionActive() || be.getClaim().isOwner(player)))) {
             return super.getDestroyProgress(state, player, world, pos);
         } else {
             return 0;
@@ -178,7 +175,7 @@ public class ClaimAugmentBlock extends Block implements Augment, EntityBlock, Po
 
     @Override
     public boolean isEnabled(Claim claim, Level world) {
-        return this.isEnabled.getAsBoolean();
+        return claim.isProtectionActive() && this.isEnabled.getAsBoolean();
     }
 
     @Nullable
@@ -194,7 +191,7 @@ public class ClaimAugmentBlock extends Block implements Augment, EntityBlock, Po
     }
 
     @Override
-    public String getPolymerSkinValue(BlockState state, BlockPos pos, PacketContext player) {
+    public String getPolymerSkinValue(BlockState state, BlockPos pos, ServerPlayer player) {
         return this.texture;
     }
 }

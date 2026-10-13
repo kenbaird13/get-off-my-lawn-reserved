@@ -34,7 +34,7 @@ public class PistonStructureResolverMixin {
         if (world.isClientSide()) {
             return;
         }
-        var claims = ClaimUtils.getClaimsAt(world, pos);
+        var claims = ClaimUtils.getActiveClaimsAt(world, pos);
         this.claimsEmpty = claims.isEmpty();
         this.trusted = new HashSet<>();
         claims.forEach(x -> {
@@ -63,7 +63,7 @@ public class PistonStructureResolverMixin {
     @Unique
     private boolean checkClaims(List<BlockPos> blocks) {
         for (var pos : blocks) {
-            var claims = ClaimUtils.getClaimsAt(this.level, pos);
+            var claims = ClaimUtils.getActiveClaimsAt(this.level, pos);
 
             boolean firstFound = true;
 
@@ -76,7 +76,7 @@ public class PistonStructureResolverMixin {
             }
 
             var mut = new BlockPos.MutableBlockPos();
-            claims = ClaimUtils.getClaimsAt(this.level, mut.set(pos).move(this.pushDirection));
+            claims = ClaimUtils.getActiveClaimsAt(this.level, mut.set(pos).move(this.pushDirection));
             if (claims.isEmpty() && this.claimsEmpty) {
                 continue;
             }

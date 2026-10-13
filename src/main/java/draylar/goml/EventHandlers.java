@@ -13,7 +13,7 @@ import draylar.goml.registry.GOMLTags;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.player.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.OwnableEntity;
@@ -26,7 +26,7 @@ import static draylar.goml.GetOffMyLawn.id;
 
 @ApiStatus.Internal
 public class EventHandlers {
-    public static final Identifier GOML_PHASE = id("protection");
+    public static final ResourceLocation GOML_PHASE = id("protection");
 
     private EventHandlers() {
         // NO-OP
@@ -61,7 +61,7 @@ public class EventHandlers {
             }
 
             if (GetOffMyLawn.CONFIG.canInteract(entity)
-                    || entity.is(GOMLTags.ALLOWED_INTERACTIONS_ENTITY)) {
+                    || entity.getType().is(GOMLTags.ALLOWED_INTERACTIONS_ENTITY)) {
                 return InteractionResult.PASS;
             }
 
@@ -70,7 +70,7 @@ public class EventHandlers {
             }
 
             if (entity instanceof Player attackedPlayer) {
-                var claims = ClaimUtils.getClaimsAt(world, entity.blockPosition());
+                var claims = ClaimUtils.getActiveClaimsAt(world, entity.blockPosition());
 
                 if (claims.isEmpty()) {
                     return InteractionResult.PASS;
@@ -82,7 +82,7 @@ public class EventHandlers {
                     } else {
                         var obj = new MutableObject<InteractionResult>(InteractionResult.PASS);
                         claims.forEach((e) -> {
-                            if (obj.getValue() instanceof InteractionResult.Fail) {
+                            if (obj.getValue() == InteractionResult.FAIL) {
                                 return;
                             }
                             var claim = e.getValue();
@@ -102,7 +102,7 @@ public class EventHandlers {
                 }
             }
 
-            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, entity.blockPosition());
+            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getActiveClaimsAt(world, entity.blockPosition());
             return testPermission(claimsFound, playerEntity, hand, entity.blockPosition(), PermissionReason.ENTITY_PROTECTED);
         });
     }
@@ -129,12 +129,12 @@ public class EventHandlers {
                 }
             }
 
-            var claimsFound = ClaimUtils.getClaimsAt(world, blockHitResult.getBlockPos());
+            var claimsFound = ClaimUtils.getActiveClaimsAt(world, blockHitResult.getBlockPos());
 
             var ac = testPermission(claimsFound, playerEntity, hand, blockHitResult.getBlockPos(), PermissionReason.AREA_PROTECTED);
 
             if (ac == InteractionResult.PASS) {
-                var claimsFound2 = ClaimUtils.getClaimsAt(world, blockHitResult.getBlockPos().relative(blockHitResult.getDirection()));
+                var claimsFound2 = ClaimUtils.getActiveClaimsAt(world, blockHitResult.getBlockPos().relative(blockHitResult.getDirection()));
                 return testPermission(claimsFound2, playerEntity, hand, blockHitResult.getBlockPos().relative(blockHitResult.getDirection()), PermissionReason.AREA_PROTECTED);
             }
 
@@ -147,7 +147,7 @@ public class EventHandlers {
             if (world.isClientSide()) {
                 return InteractionResult.PASS;
             }
-            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, blockPos);
+            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getActiveClaimsAt(world, blockPos);
             return testPermission(claimsFound, playerEntity, hand, blockPos, PermissionReason.BLOCK_PROTECTED);
         });
 
@@ -155,7 +155,7 @@ public class EventHandlers {
             if (world.isClientSide()) {
                 return true;
             }
-            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, pos);
+            Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getActiveClaimsAt(world, pos);
             InteractionResult result = testPermission(claimsFound, player, InteractionHand.MAIN_HAND, pos, PermissionReason.BLOCK_PROTECTED);
             return !result.equals(InteractionResult.FAIL);
         });
@@ -169,7 +169,8 @@ public class EventHandlers {
             var be = world.getBlockEntity(blockPos);
 
             if (be instanceof ClaimAnchorBlockEntity) {
-                if (!(((ClaimAnchorBlockEntity) be).getClaim().isOwner(playerEntity) || ClaimUtils.isInAdminMode(playerEntity))) {
+                var claim = ((ClaimAnchorBlockEntity) be).getClaim();
+                if (claim != null && claim.isProtectionActive() && !(claim.isOwner(playerEntity) || ClaimUtils.isInAdminMode(playerEntity))) {
                     return InteractionResult.FAIL;
                 }
             }
@@ -184,6 +185,7 @@ public class EventHandlers {
             return InteractionResult.PASS;
         }
 
+        claims = claims.filter(x -> x.getValue().isProtectionActive());
         if (!claims.isEmpty()) {
             boolean noPermission = claims.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !boxInfo.getValue().hasPermission(player));
 
@@ -191,7 +193,7 @@ public class EventHandlers {
                 InteractionResult check = ClaimEvents.PERMISSION_DENIED.invoker().check(player, player.level(), hand, pos, reason);
 
                 if (check.consumesAction() || check.equals(InteractionResult.PASS)) {
-                    player.sendOverlayMessage(reason.getReason());
+                    player.displayClientMessage(reason.getReason(), true);
                     return InteractionResult.FAIL;
                 }
             }

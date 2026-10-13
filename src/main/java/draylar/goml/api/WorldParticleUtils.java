@@ -37,7 +37,7 @@ public class WorldParticleUtils {
     }
 
     private static void spawnParticleIfVisible(ServerPlayer player, ParticleOptions effect, double x, double y, double z) {
-        ServerLevel world = player.level();
+        ServerLevel world = player.serverLevel();
 
         Vec3 delta = player.position().subtract(x, y, z);
         double length2 = delta.lengthSqr();
@@ -52,7 +52,7 @@ public class WorldParticleUtils {
         }*/
 
         world.sendParticles(
-                player, effect, true, true,
+                player, effect, true,
                 x, y, z,
                 1,
                 0.0, 0.0, 0.0,

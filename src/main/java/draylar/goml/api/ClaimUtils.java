@@ -22,10 +22,8 @@ import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.objects.PlayerSprite;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -38,7 +36,6 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.BlockState;
@@ -52,6 +49,22 @@ import java.util.stream.Collectors;
 import static draylar.goml.GetOffMyLawn.id;
 
 public class ClaimUtils {
+
+    public static Selection<Entry<ClaimBox, Claim>> getActiveClaimsAt(LevelReader world, BlockPos pos) {
+        return getClaimsAt(world, pos).filter(x -> x.getValue().isProtectionActive());
+    }
+
+    public static Selection<Entry<ClaimBox, Claim>> getActiveClaimsInBox(LevelReader world, Box box) {
+        return getClaimsInBox(world, box).filter(x -> x.getValue().isProtectionActive());
+    }
+
+    public static Selection<Entry<ClaimBox, Claim>> getActiveClaimsInBox(LevelReader world, BlockPos lower, BlockPos upper) {
+        return getActiveClaimsInBox(world, createBox(lower, upper));
+    }
+
+    public static Selection<Entry<ClaimBox, Claim>> getActiveClaimsInOpenBox(LevelReader world, Box box) {
+        return getClaimsInOpenBox(world, box).filter(x -> x.getValue().isProtectionActive());
+    }
 
     /**
      * Returns all claims at the given position in the given world.
@@ -176,31 +189,32 @@ public class ClaimUtils {
      * @return whether or not the claim information matches up with the player and position
      */
     public static boolean canDestroyClaimBlock(Entry<ClaimBox, Claim> claim, @Nullable Player checkPlayer, BlockPos checkPos) {
-        return (checkPlayer == null || playerHasPermission(claim, checkPlayer)) && claim.getValue().getOrigin().equals(checkPos);
+        return (checkPlayer == null || !claim.getValue().isProtectionActive() || playerHasPermission(claim, checkPlayer))
+                && claim.getValue().getOrigin().equals(checkPos);
     }
 
     public static boolean canModifyClaimAt(Level world, BlockPos pos, Entry<ClaimBox, Claim> claim, Player player) {
-        return claim.getValue().hasPermission(player)
+        return !claim.getValue().isProtectionActive() || claim.getValue().hasPermission(player)
                 || isInAdminMode(player)
                 || ClaimEvents.PERMISSION_DENIED.invoker().check(player, world, InteractionHand.MAIN_HAND, pos, PermissionReason.AREA_PROTECTED) == InteractionResult.SUCCESS;
     }
 
     public static boolean isInAdminMode(Player player) {
-        return FabricPermissionBridge.checkPermission(player, id("modify_others"), PermissionLevel.ADMINS) && (player instanceof GomlPlayer adminModePlayer && adminModePlayer.goml_getAdminMode());
+        return FabricPermissionBridge.checkPermission(player, id("modify_others"), 2) && (player instanceof GomlPlayer adminModePlayer && adminModePlayer.goml_getAdminMode());
     }
 
     public static boolean canFireDestroy(Level world, BlockPos pos) {
-        return ClaimUtils.getClaimsAt(world, pos).isEmpty();
+        return ClaimUtils.getActiveClaimsAt(world, pos).isEmpty();
     }
 
     public static boolean canFluidFlow(Level world, BlockPos cur, BlockPos dest) {
-        var claimsDest = ClaimUtils.getClaimsAt(world, dest);
-        var claimsCur = ClaimUtils.getClaimsAt(world, cur);
+        var claimsDest = ClaimUtils.getActiveClaimsAt(world, dest);
+        var claimsCur = ClaimUtils.getActiveClaimsAt(world, cur);
         return claimsDest.isEmpty() || claimsCur.anyMatch(x -> claimsCur.anyMatch(y -> x.equals(y)));
     }
 
     public static boolean canExplosionDestroy(Level world, BlockPos pos, @Nullable Entity causingEntity) {
-        Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, pos);
+        Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getActiveClaimsAt(world, pos);
 
         Player player;
 
@@ -267,7 +281,7 @@ public class ClaimUtils {
         ) {
             return true;
         }
-        var claims = ClaimUtils.getClaimsAt(world, entity.blockPosition());
+        var claims = ClaimUtils.getActiveClaimsAt(world, entity.blockPosition());
 
         if (claims.isEmpty()) {
             return true;
@@ -307,7 +321,7 @@ public class ClaimUtils {
             return true;
         }
 
-        Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getClaimsAt(world, pos);
+        Selection<Entry<ClaimBox, Claim>> claimsFound = ClaimUtils.getActiveClaimsAt(world, pos);
         if (player != null && claimsFound.isNotEmpty()) {
             return !claimsFound.anyMatch((Entry<ClaimBox, Claim> boxInfo) -> !canModifyClaimAt(world, pos, boxInfo, player));
         }
@@ -317,22 +331,8 @@ public class ClaimUtils {
 
     @Nullable
     public static ClaimAnchorBlockEntity getAnchor(Level world, Claim claim) {
-        ClaimAnchorBlockEntity claimAnchor = (ClaimAnchorBlockEntity) world.getBlockEntity(claim.getOrigin());
-
-        if (claimAnchor == null) {
-            GetOffMyLawn.LOGGER.warn(String.format("A claim anchor was requested at %s, but no Claim Anchor BE was found! Was the claim not properly removed? Removing the claim now.", claim.getOrigin().toString()));
-
-            // Remove claim
-            GetOffMyLawn.CLAIM.get(world).getClaims().entries().forEach(entry -> {
-                if (entry.getValue() == claim) {
-                    claim.destroy();
-                }
-            });
-
-            return null;
-        }
-
-        return claimAnchor;
+        if (!world.hasChunkAt(claim.getOrigin())) return null;
+        return world.getBlockEntity(claim.getOrigin()) instanceof ClaimAnchorBlockEntity anchor ? anchor : null;
     }
 
     public static List<Component> getClaimText(MinecraftServer server, Claim claim) {
@@ -366,6 +366,7 @@ public class ClaimUtils {
             }
         }
 
+        texts.addAll(draylar.goml.ui.ClaimMaintenanceGui.statusLines(claim));
         return texts;
     }
 
@@ -375,10 +376,10 @@ public class ClaimUtils {
         var builder = Component.empty();
         var iterator = uuids.iterator();
         while (iterator.hasNext()) {
-            var gameProfile = server.services().nameToIdCache().get(iterator.next());
+            var gameProfile = server.getProfileCache().get(iterator.next());
             if (gameProfile.isPresent()) {
-                builder.append(Component.object(new PlayerSprite(ResolvableProfile.createUnresolved(gameProfile.get().id()), true)));
-                builder.append(" " + gameProfile.get().name());
+
+                builder.append(" " + gameProfile.get().getName());
 
                 if (iterator.hasNext()) {
                     builder.append(", ");
@@ -468,12 +469,12 @@ public class ClaimUtils {
         return hasMatchingClaims(world, target, origin, null);
     }
     public static boolean hasMatchingClaims(Level world, BlockPos target, BlockPos origin, @Nullable UUID uuid) {
-        var claims = ClaimUtils.getClaimsAt(world, target);
+        var claims = ClaimUtils.getActiveClaimsAt(world, target);
 
         if (claims.isEmpty()) {
             return true;
         }
-        var originClaims = ClaimUtils.getClaimsAt(world, origin);
+        var originClaims = ClaimUtils.getActiveClaimsAt(world, origin);
 
         if (originClaims.isEmpty() && uuid == null) {
             return false;
@@ -535,8 +536,8 @@ public class ClaimUtils {
 
     public static void drawClaimInWorld(ServerPlayer player, Claim claim) {
         var box = claim.getClaimBox().toBox();
-        var minPos = new BlockPos(box.x1(), Math.max(box.y1(), player.level().getMinY()), box.z1());
-        var maxPos = new BlockPos(box.x2() - 1, Math.min(box.y2() - 1, player.level().getMaxY()), box.z2() - 1);
+        var minPos = new BlockPos(box.x1(), Math.max(box.y1(), player.level().getMinBuildHeight()), box.z1());
+        var maxPos = new BlockPos(box.x2() - 1, Math.min(box.y2() - 1, player.level().getMaxBuildHeight()), box.z2() - 1);
 
         BlockState state = ClaimUtils.gogglesClaimColor(claim);
 

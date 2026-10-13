@@ -1,7 +1,6 @@
 package draylar.goml.block.augment;
 
 import draylar.goml.api.Claim;
-import draylar.goml.block.ClaimAugmentBlock;
 import draylar.goml.block.SelectiveClaimAugmentBlock;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -21,7 +20,7 @@ public class ChaosZoneAugmentBlock extends SelectiveClaimAugmentBlock {
     @Override
     public void playerTick(Claim claim, Player player) {
         if (canApply(claim, player)) {
-            player.addEffect(new MobEffectInstance(MobEffects.STRENGTH, 5, 0, true, false));
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 5, 0, true, false));
         }
     }
 }

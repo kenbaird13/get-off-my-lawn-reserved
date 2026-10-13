@@ -6,8 +6,12 @@
     "iEi"
   ],
   "key": {
-    "i": "minecraft:iron_ingot",
-    "E": "minecraft:ghast_tear"
+    "i": {
+      "item": "minecraft:iron_ingot"
+    },
+    "E": {
+      "item": "minecraft:ghast_tear"
+    }
   },
   "result": {
     "id": "goml:angelic_aura",

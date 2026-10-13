@@ -6,9 +6,15 @@
     "III"
   ],
   "key": {
-    "#": "minecraft:copper_ingot",
-    "R": "minecraft:redstone_block",
-    "I": "minecraft:iron_block"
+    "#": {
+      "item": "minecraft:copper_ingot"
+    },
+    "R": {
+      "item": "minecraft:redstone_block"
+    },
+    "I": {
+      "item": "minecraft:iron_block"
+    }
   },
   "result": {
     "id": "goml:force_field",

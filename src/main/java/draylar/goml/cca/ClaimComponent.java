@@ -9,4 +9,6 @@ public interface ClaimComponent extends ComponentV3 {
     RTreeMap<ClaimBox, Claim> getClaims();
     void add(Claim info);
     void remove(Claim info);
+    void queueDrops(net.minecraft.core.BlockPos origin, java.util.List<net.minecraft.world.item.ItemStack> stacks);
+    void tickPendingDrops();
 }

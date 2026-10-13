@@ -29,8 +29,7 @@
     "augment.EnderManMixin$EndermanLeaveBlockGoalMixin",
     "augment.EnderManMixin$EndermanTakeBlockGoalMixin",
     "augment.VillagerMixin",
-    "compat.DynmapClientMixin",
-    "datafix.MixinDimensionStorageFileFix"
+    "compat.DynmapClientMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -15,8 +15,11 @@ import draylar.goml.ui.AdminAugmentGui;
 import draylar.goml.ui.ClaimAugmentGui;
 import draylar.goml.ui.ClaimPlayerListGui;
 import draylar.goml.ui.PagedGui;
+import draylar.goml.ui.ClaimMaintenanceGui;
+import draylar.goml.ui.ClaimGui;
+import draylar.goml.config.MaintenanceRule;
+import eu.pb4.sgui.api.gui.GuiInterface;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
-import eu.pb4.sgui.api.gui.SimpleGui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -25,18 +28,17 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
+import draylar.goml.other.nbt.NbtInput;
+import draylar.goml.other.nbt.NbtOutput;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
@@ -57,7 +59,7 @@ public class Claim {
     public static final String CUSTOM_DATA_KEY = "CustomData";
     private static final String BOX_KEY = "Box";
 
-    private static final Codec<Map<Identifier, Tag>> CUSTOM_DATA_CODEC = Codec.unboundedMap(Identifier.CODEC, ExtraCodecs.NBT);
+    private static final Codec<Map<ResourceLocation, Tag>> CUSTOM_DATA_CODEC = Codec.unboundedMap(ResourceLocation.CODEC, Codec.PASSTHROUGH.xmap(x -> x.convert(NbtOps.INSTANCE).getValue(), x -> new com.mojang.serialization.Dynamic<>(NbtOps.INSTANCE, x)));
 
     private final Set<UUID> owners = new HashSet<>();
     private final Set<UUID> trusted = new HashSet<>();
@@ -68,7 +70,7 @@ public class Claim {
     private final Set<PlayerGroup.Key> trustedGroupKeys = new HashSet<>();
     private final BlockPos origin;
     private ClaimAnchorBlock type = GOMLBlocks.MAKESHIFT_CLAIM_ANCHOR.getFirst();
-    private Identifier world;
+    private ResourceLocation world;
     @Nullable
     private ItemStack icon;
 
@@ -78,6 +80,10 @@ public class Claim {
     private final Map<BlockPos, Augment> augments = new HashMap<>();
 
     private final List<Player> previousTickPlayers = new ArrayList<>();
+    private final ClaimMaintenance maintenance = new ClaimMaintenance();
+    private final Set<GuiInterface> menus = Collections.newSetFromMap(new IdentityHashMap<>());
+    private long accessRevision;
+    private boolean replacingAnchor;
     private boolean destroyed = false;
     private boolean updatable = false;
 
@@ -102,8 +108,7 @@ public class Claim {
     }
 
     public void addOwner(UUID id) {
-        this.owners.add(id);
-        onUpdated();
+        if (this.owners.add(id)) accessChanged();
     }
 
     public boolean hasPermission(Player player) {
@@ -128,13 +133,14 @@ public class Claim {
     }
 
     public void trust(UUID uuid) {
-        trusted.add(uuid);
-        onUpdated();
+        if (trusted.add(uuid)) accessChanged();
     }
 
     public void trust(PlayerGroup group) {
-        getGroups().add(group);
-        group.addClaim(this);
+        if (getGroups().add(group)) {
+            group.addClaim(this);
+            accessChanged();
+        }
     }
 
     public void untrust(Player player) {
@@ -142,13 +148,15 @@ public class Claim {
     }
 
     public void untrust(PlayerGroup group) {
-        getGroups().remove(group);
-        group.removeClaim(this);
+        if (getGroups().remove(group)) {
+            group.removeClaim(this);
+            trustedGroupKeys.remove(group.getKey());
+            accessChanged();
+        }
     }
 
     public void untrust(UUID uuid) {
-        trusted.remove(uuid);
-        onUpdated();
+        if (trusted.remove(uuid)) accessChanged();
     }
 
     /**
@@ -159,11 +167,11 @@ public class Claim {
      * @return  claim owner's UUIDs
      */
     public Set<UUID> getOwners() {
-        return owners;
+        return Collections.unmodifiableSet(owners);
     }
 
     public Set<UUID> getTrusted() {
-        return trusted;
+        return Collections.unmodifiableSet(trusted);
     }
 
     /**
@@ -187,7 +195,7 @@ public class Claim {
      *
      * @return  this object serialized to a {@link CompoundTag}
      */
-    public void writeData(ValueOutput view) {
+    public void writeData(NbtOutput view) {
         // collect owner UUIDs into list
         var ownersTag = view.list(OWNERS_KEY, UUIDUtil.CODEC);
         for (UUID ownerUUID : owners) {
@@ -221,7 +229,7 @@ public class Claim {
         }
         view.putString(TYPE_KEY, BuiltInRegistries.BLOCK.getKey(this.type).toString());
 
-        var customData = new HashMap<Identifier, Tag>();
+        var customData = new HashMap<ResourceLocation, Tag>();
 
         for (var entry : this.customData.entrySet()) {
             var value = entry.getKey().serializer().apply(entry.getValue());
@@ -243,10 +251,11 @@ public class Claim {
         }
 
         this.claimBox.writeData(view.child(BOX_KEY));
+        this.maintenance.writeData(view.child("Maintenance"));
     }
 
     @ApiStatus.Internal
-    public static Claim readData(MinecraftServer server, ValueInput view, int version) {
+    public static Claim readData(MinecraftServer server, NbtInput view, int version) {
         // Collect UUID of owners
         Set<UUID> ownerUUIDs = new HashSet<>();
         for (var ownerUUID : view.listOrEmpty(OWNERS_KEY, UUIDUtil.CODEC)) {
@@ -267,7 +276,7 @@ public class Claim {
 
         claim.icon = view.read(ICON_KEY, ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
         if (!view.getStringOr(TYPE_KEY, "").isEmpty()) {
-            var block = BuiltInRegistries.BLOCK.getValue(Identifier.tryParse(view.getStringOr(TYPE_KEY, "")));
+            var block = BuiltInRegistries.BLOCK.get(ResourceLocation.tryParse(view.getStringOr(TYPE_KEY, "")));
             if (block instanceof ClaimAnchorBlock anchorBlock) {
                 claim.type = anchorBlock;
             }
@@ -293,12 +302,14 @@ public class Claim {
 
         for (var value : view.childrenListOrEmpty(AUGMENTS_KEY)) {
             var pos = LegacyNbtHelper.toBlockPos(value.read("Pos", CompoundTag.CODEC).orElseGet(CompoundTag::new));
-            var type = GOMLAugments.get(Identifier.tryParse(value.getStringOr("Type", "")));
+            var type = GOMLAugments.get(ResourceLocation.tryParse(value.getStringOr("Type", "")));
 
             if (pos != null && type != null) {
                 claim.augments.put(pos, type);
             }
         }
+
+        view.child("Maintenance").ifPresent(claim.maintenance::readData);
 
         for (var augment : claim.augments.entrySet()) {
             augment.getValue().onLoaded(claim, augment.getKey());
@@ -307,8 +318,8 @@ public class Claim {
         return claim;
     }
 
-    public Identifier getWorld() {
-        return this.world != null ? this.world : Identifier.parse("undefined");
+    public ResourceLocation getWorld() {
+        return this.world != null ? this.world : ResourceLocation.parse("undefined");
     }
 
     @Nullable
@@ -361,7 +372,8 @@ public class Claim {
     }
 
     public void openUi(ServerPlayer player) {
-        var gui = new SimpleGui(MenuType.HOPPER, player, false);
+        if (destroyed) return;
+        var gui = new ClaimGui(this, MenuType.HOPPER, player, false);
         gui.setTitle(Component.translatable("text.goml.gui.claim.title"));
 
         gui.addSlot(GuiElementBuilder.from(this.icon)
@@ -379,17 +391,22 @@ public class Claim {
 
         gui.addSlot(new GuiElementBuilder(Items.PLAYER_HEAD)
                 .setName(Component.translatable("text.goml.gui.claim.augments").withStyle(ChatFormatting.WHITE))
-                .setProfileSkinTexture(GOMLTextures.ANGELIC_AURA)
+                .setSkullOwner(GOMLTextures.ANGELIC_AURA)
                 .setCallback(() -> {
                     PagedGui.playClickSound(player);
                     new ClaimAugmentGui(player, this, ClaimUtils.isInAdminMode(player) || this.isOwner(player), () -> openUi(player));
                 })
         );
 
-        if (this.type == GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst()) {
+        gui.addSlot(new GuiElementBuilder(Items.CHEST)
+                .setName(Component.translatable("text.goml.maintenance.title"))
+                .setLore(ClaimMaintenanceGui.statusLines(this))
+                .setCallback(() -> new ClaimMaintenanceGui(player, this)));
+
+        if (this.type == GOMLBlocks.ADMIN_CLAIM_ANCHOR.getFirst() && ClaimUtils.isInAdminMode(player)) {
             gui.addSlot(new GuiElementBuilder(Items.PLAYER_HEAD)
                     .setName(Component.translatable("text.goml.gui.admin_settings").withStyle(ChatFormatting.WHITE))
-                    .setProfileSkinTexture("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmY3YTQyMmRiMzVkMjhjZmI2N2U2YzE2MTVjZGFjNGQ3MzAwNzI0NzE4Nzc0MGJhODY1Mzg5OWE0NGI3YjUyMCJ9fX0=")
+                    .setSkullOwner("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmY3YTQyMmRiMzVkMjhjZmI2N2U2YzE2MTVjZGFjNGQ3MzAwNzI0NzE4Nzc0MGJhODY1Mzg5OWE0NGI3YjUyMCJ9fX0=")
                     .setCallback(() -> {
                         PagedGui.playClickSound(player);
                         new AdminAugmentGui(this, player, () -> openUi(player));
@@ -431,7 +448,7 @@ public class Claim {
     }
 
     @ApiStatus.Internal
-    public void internal_setWorld(Identifier world) {
+    public void internal_setWorld(ResourceLocation world) {
         this.world = world;
     }
 
@@ -455,6 +472,7 @@ public class Claim {
 
     @ApiStatus.Internal
     public void internal_updateChunkCount(ServerLevel world) {
+        this.chunksLoadedCount = 0;
         var minX = SectionPos.blockToSectionCoord(this.claimBox.toBox().x1());
         var minZ = SectionPos.blockToSectionCoord(this.claimBox.toBox().z1());
 
@@ -489,8 +507,8 @@ public class Claim {
 
     public void addAugment(BlockPos pos, Augment augment) {
         this.augments.put(pos, augment);
-        for (var player : this.previousTickPlayers) {
-            augment.onPlayerEnter(this, player);
+        if (isProtectionActive()) {
+            for (var player : this.previousTickPlayers) augment.onPlayerEnter(this, player);
         }
         onUpdated();
     }
@@ -546,6 +564,9 @@ public class Claim {
     }
 
     public void tick(ServerLevel world) {
+        if (destroyed) return;
+        if (maintenance.tick(maintenanceRule())) maintenanceChanged();
+        if (!isProtectionActive()) return;
         if (this.chunksLoadedCount > 0) {
             var box = this.claimBox.minecraftBox();
             var playersInClaim = world.getPlayers(x -> x.getBoundingBox().intersects(box));
@@ -604,20 +625,107 @@ public class Claim {
         return g;
     }
 
-    public void destroy() {
-        for (var group : this.getGroups()) {
-            group.removeClaim(this);
-        }
+    public ClaimMaintenance maintenance() { return maintenance; }
 
+    public MaintenanceRule maintenanceRule() {
+        return GetOffMyLawn.CONFIG.maintenanceRule(type);
+    }
+
+    public boolean isProtectionActive() {
+        return !destroyed && (maintenanceRule().isExempt() || !maintenance.isOverdue());
+    }
+
+    public boolean canManage(Player player) {
+        return !destroyed && !player.isSpectator() && (isOwner(player) || ClaimUtils.isInAdminMode(player));
+    }
+
+    public long accessRevision() { return accessRevision; }
+    public void registerMenu(GuiInterface menu) { menus.add(menu); }
+    public void unregisterMenu(GuiInterface menu) { menus.remove(menu); }
+
+    public void invalidateMenus() {
+        accessRevision++;
+        for (var menu : List.copyOf(menus)) {
+            if (menu.isOpen()) menu.close(false);
+        }
+        menus.clear();
+    }
+
+    private void accessChanged() {
+        invalidateMenus();
+        onUpdated();
+    }
+
+    public void removeOwner(UUID id) {
+        if (owners.remove(id)) accessChanged();
+    }
+
+    /** Called after an effective-state change, once the new rule/state is already visible. */
+    public void maintenanceChanged() {
+        invalidateMenus();
+        clearTickedPlayers();
+        // The shared legacy helper intentionally remains unchanged; maintenance clears its own tracking.
+        previousTickPlayers.clear();
+        onUpdated();
+    }
+
+    public void configurationChanged(boolean wasActive) {
+        invalidateMenus(); // Item restrictions and stale settings must also be refreshed.
+        if (wasActive != isProtectionActive()) {
+            clearTickedPlayers();
+            previousTickPlayers.clear();
+        }
+        onUpdated();
+    }
+
+    public void upgraded() {
+        maintenance.upgraded(maintenanceRule());
+        maintenanceChanged();
+    }
+
+    public boolean isReplacingAnchor() { return replacingAnchor; }
+    public void setReplacingAnchor(boolean replacing) { replacingAnchor = replacing; }
+
+    /** Server-thread transaction; null is success, otherwise no payment was consumed. */
+    @Nullable
+    public Component takeOver(ServerPlayer player) {
+        if (!server.isSameThread()) throw new IllegalStateException("Takeover must run on the server thread");
+        var level = getWorldInstance(server);
+        if (destroyed || level == null || player.level() != level || player.isSpectator()
+                || !maintenance.isOverdue() || maintenanceRule().isExempt()
+                || !ClaimUtils.getClaimsWithOrigin(level, origin).anyMatch(x -> x.getValue() == this))
+            return Component.translatable("text.goml.maintenance.unavailable");
+        if (!ClaimUtils.canModify(level, origin, player))
+            return Component.translatable("text.goml.maintenance.protected_anchor");
+        var rejection = ClaimPlacement.rejection(level, player, type, claimBox, this);
+        if (rejection != null) return rejection;
+        if (!ClaimMaintenance.consumeOne(player.getInventory(), maintenanceRule().item()))
+            return Component.translatable("text.goml.maintenance.missing_item", maintenanceRule().item().getDefaultInstance().getHoverName());
+        for (var group : List.copyOf(getGroups())) group.removeClaim(this);
+        getGroups().clear();
+        trustedGroupKeys.clear();
+        owners.clear();
+        owners.add(player.getUUID());
+        trusted.clear();
+        maintenance.renew(maintenanceRule());
+        maintenanceChanged();
+        return null;
+    }
+
+    public void destroy() {
+        if (destroyed || replacingAnchor) return;
+        destroyed = true;
+        invalidateMenus();
+        for (var group : List.copyOf(this.getGroups())) group.removeClaim(this);
         var world = getWorldInstance(this.server);
         if (world != null) {
+            // Component takes ownership of the stock before the claim record is discarded.
+            GetOffMyLawn.CLAIM.get(world).queueDrops(origin, maintenance.removeAllItems());
             GetOffMyLawn.CLAIM.get(world).remove(this);
         }
-        if (!this.destroyed) {
-            this.destroyed = true;
-            ClaimEvents.CLAIM_DESTROYED.invoker().onEvent(this);
-            this.clearTickedPlayers();
-        }
+        ClaimEvents.CLAIM_DESTROYED.invoker().onEvent(this);
+        this.clearTickedPlayers();
+        previousTickPlayers.clear();
     }
 
     public boolean hasPermission(Collection<UUID> trusted) {

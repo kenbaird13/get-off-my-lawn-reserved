@@ -2,8 +2,6 @@ package draylar.goml.ui;
 
 import draylar.goml.api.Augment;
 import draylar.goml.api.Claim;
-import draylar.goml.api.ClaimUtils;
-import draylar.goml.block.entity.ClaimAnchorBlockEntity;
 import draylar.goml.item.TooltippedBlockItem;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
 import org.jetbrains.annotations.ApiStatus;
@@ -12,9 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Block;
 
@@ -22,13 +18,12 @@ import net.minecraft.world.level.block.Block;
 public class ClaimAugmentGui extends PagedGui {
     private final Claim claim;
     private final boolean canModify;
-    private final ClaimAnchorBlockEntity blockEntity;
     private final List<Map.Entry<BlockPos, Augment>> cachedEntries = new ArrayList<>();
 
     public ClaimAugmentGui(ServerPlayer player, Claim claim, boolean canModify, @Nullable Runnable onClose) {
         super(player, onClose);
         this.claim = claim;
-        this.blockEntity = ClaimUtils.getAnchor(player.level().getServer().getLevel(ResourceKey.create(Registries.DIMENSION, claim.getWorld())), claim);
+        bindClaim(claim, false);
         this.canModify = canModify;
         this.setTitle(Component.translatable("text.goml.gui.augment_list.title"));
         this.updateDisplay();
@@ -40,17 +35,17 @@ public class ClaimAugmentGui extends PagedGui {
         this.cachedEntries.clear();
         var rest = new ArrayList<Map.Entry<BlockPos, Augment>>();
 
-        for (var entry : this.blockEntity.getAugments().entrySet()) {
+        for (var entry : this.claim.getAugments().entrySet()) {
             (entry.getValue().hasSettings() ? this.cachedEntries : rest).add(entry);
         }
-        
+
         this.cachedEntries.addAll(rest);
         super.updateDisplay();
     }
 
     @Override
     protected int getPageAmount() {
-        return this.blockEntity.getAugments().size() / PAGE_SIZE;
+        return this.claim.getAugments().size() / PAGE_SIZE;
     }
 
     @Override
@@ -81,6 +76,7 @@ public class ClaimAugmentGui extends PagedGui {
                 builder.addLoreLine(Component.translatable("text.goml.gui.click_to_modify").withStyle(ChatFormatting.RED));
                 builder.setCallback(() -> {
                     playClickSound(this.player);
+                    if (!hasClaimAccess() || !claim.canManage(player)) return;
                     entry.getValue().openSettings(this.claim, this.player, () -> {
                         new ClaimAugmentGui(this.player, this.claim, this.canModify, this.closeCallback);
                     });

@@ -6,10 +6,18 @@
     "#i#"
   ],
   "key": {
-    "#": "minecraft:stone",
-    "i": "minecraft:emerald",
-    "I": "minecraft:emerald_block",
-    "O": "goml:crystal_claim_anchor"
+    "#": {
+      "item": "minecraft:stone"
+    },
+    "i": {
+      "item": "minecraft:emerald"
+    },
+    "I": {
+      "item": "minecraft:emerald_block"
+    },
+    "O": {
+      "item": "goml:crystal_claim_anchor"
+    }
   },
   "result": {
     "id": "goml:emeradic_claim_anchor",

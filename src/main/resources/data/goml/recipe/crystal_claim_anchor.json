@@ -6,10 +6,18 @@
     "#i#"
   ],
   "key": {
-    "#": "minecraft:stone",
-    "i": "minecraft:diamond",
-    "I": "minecraft:diamond_block",
-    "O": "goml:glistening_claim_anchor"
+    "#": {
+      "item": "minecraft:stone"
+    },
+    "i": {
+      "item": "minecraft:diamond"
+    },
+    "I": {
+      "item": "minecraft:diamond_block"
+    },
+    "O": {
+      "item": "goml:glistening_claim_anchor"
+    }
   },
   "result": {
     "id": "goml:crystal_claim_anchor",

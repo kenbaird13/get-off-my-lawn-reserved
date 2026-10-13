@@ -33,7 +33,7 @@ public final class PlayerHeadRenderer {
 
     /**
      * Renders the head portion of a skin texture from a URL and encodes it as a base64 png string.
-     * 
+     *
      * @param textureUrl the URL of the skin texture
      * @return an optional containing the base64-encoded png string if successful, or an empty optional if failed
      */
@@ -100,7 +100,7 @@ public final class PlayerHeadRenderer {
 
     /**
      * Loads a skin texture from a URL.
-     * 
+     *
      * @param src skin texture URL
      * @return bufferedImage containing the skin texture
      * @throws IOException if the texture could not be loaded
@@ -124,7 +124,7 @@ public final class PlayerHeadRenderer {
 
     /**
      * Encodes a BufferedImage as a base64 png string.
-     * 
+     *
      * @param image the image to encode
      * @return a base64-encoded png string
      * @throws IOException if the image could not be encoded
@@ -166,7 +166,7 @@ public final class PlayerHeadRenderer {
 
     /**
      * Renders the head portion of a player skin texture by extracting and combining skin layers.
-     * 
+     *
      * @param skin the full skin texture image
      * @return the rendered head image, or a fallback 8x8 image if rendering fails
      */

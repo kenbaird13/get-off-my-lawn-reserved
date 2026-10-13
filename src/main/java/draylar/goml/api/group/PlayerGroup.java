@@ -5,7 +5,6 @@ import draylar.goml.api.Claim;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.item.ItemStack;
 
 public interface PlayerGroup {
@@ -21,7 +20,7 @@ public interface PlayerGroup {
     boolean addClaim(Claim claim);
     boolean removeClaim(Claim claim);
 
-    record Member(NameAndId profile, String role) {}
+    record Member(GameProfile profile, String role) {}
 
     record Key(String providerId, String groupId) {
         public String compact() {

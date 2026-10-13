@@ -12,7 +12,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
 
 public class GenericPlayerAndGroupSelectionGui extends GenericPlayerSelectionGui {
     private final Predicate<PlayerGroup> shouldDisplayGroup;
@@ -20,8 +19,8 @@ public class GenericPlayerAndGroupSelectionGui extends GenericPlayerSelectionGui
     private final List<PlayerGroup> groups = new ArrayList<>();
 
 
-    public GenericPlayerAndGroupSelectionGui(ServerPlayer player, Component title, Predicate<NameAndId> shouldDisplay,
-                                             Predicate<PlayerGroup> shouldDisplayGroup, Consumer<NameAndId> onClick, Consumer<PlayerGroup> onClickGroup, Runnable postClose) {
+    public GenericPlayerAndGroupSelectionGui(ServerPlayer player, Component title, Predicate<GameProfile> shouldDisplay,
+                                             Predicate<PlayerGroup> shouldDisplayGroup, Consumer<GameProfile> onClick, Consumer<PlayerGroup> onClickGroup, Runnable postClose) {
         super(player, title, shouldDisplay, onClick, postClose);
         this.shouldDisplayGroup = shouldDisplayGroup;
         this.onClickGroup = onClickGroup;

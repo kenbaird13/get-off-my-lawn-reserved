@@ -11,23 +11,17 @@ import draylar.goml.api.event.ClaimEvents;
 import draylar.goml.block.ClaimAnchorBlock;
 import draylar.goml.block.entity.ClaimAnchorBlockEntity;
 import eu.pb4.polymer.core.api.item.PolymerItem;
-import net.minecraft.core.HolderLookup;
-import org.jetbrains.annotations.Nullable;
-import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
+import net.minecraft.server.level.ServerPlayer;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -76,7 +70,7 @@ public class UpgradeKitItem extends Item implements PolymerItem {
 
 
                 // if we have permission
-                if(!noPermission) {
+                if(!noPermission && currentClaim.get() != null) {
                     var radius = to.getRadius();
                     var newBox = ClaimUtils.createClaimBox(pos, radius);
 
@@ -87,11 +81,23 @@ public class UpgradeKitItem extends Item implements PolymerItem {
                         var oldSize = claimInfo.getClaimBox();
 
                         // remove claim
+                        claimInfo.internal_disableUpdates();
                         GetOffMyLawn.CLAIM.get(world).remove(claimInfo);
 
                         // set block
                         BlockEntity oldBE = world.getBlockEntity(pos);
-                        world.setBlockAndUpdate(pos, to.defaultBlockState());
+                        claimInfo.setReplacingAnchor(true);
+                        boolean replaced;
+                        try {
+                            replaced = world.setBlockAndUpdate(pos, to.defaultBlockState());
+                        } finally {
+                            claimInfo.setReplacingAnchor(false);
+                        }
+                        if (!replaced) {
+                            GetOffMyLawn.CLAIM.get(world).add(claimInfo);
+                            claimInfo.internal_enableUpdates();
+                            return InteractionResult.FAIL;
+                        }
 
                         if (this.to.asItem() != null) {
                             claimInfo.internal_setIcon(this.to.asItem().getDefaultInstance());
@@ -116,6 +122,8 @@ public class UpgradeKitItem extends Item implements PolymerItem {
                             ((ClaimAnchorBlockEntity) newBE).from(((ClaimAnchorBlockEntity) oldBE));
                         }
 
+                        claimInfo.internal_enableUpdates();
+                        claimInfo.upgraded();
                         ClaimEvents.CLAIM_RESIZED.invoker().onResizeEvent(claimInfo, oldSize, newBox);
                         return InteractionResult.SUCCESS;
                     } else {
@@ -142,9 +150,9 @@ public class UpgradeKitItem extends Item implements PolymerItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay displayComponent, Consumer<Component> textConsumer, TooltipFlag type) {
-        super.appendHoverText(stack, context, displayComponent, textConsumer, type);
-        textConsumer.accept(Component.translatable(from.getDescriptionId()).append(" -> ").append(Component.translatable(to.getDescriptionId())).withStyle(ChatFormatting.GRAY));
+    public void appendHoverText(ItemStack stack, TooltipContext context, java.util.List<Component> textConsumer, TooltipFlag type) {
+        super.appendHoverText(stack, context, textConsumer, type);
+        textConsumer.add(Component.translatable(from.getDescriptionId()).append(" -> ").append(Component.translatable(to.getDescriptionId())).withStyle(ChatFormatting.GRAY));
     }
 
     @Override
@@ -153,12 +161,8 @@ public class UpgradeKitItem extends Item implements PolymerItem {
     }
 
     @Override
-    public Item getPolymerItem(ItemStack itemStack, PacketContext context) {
+    public Item getPolymerItem(ItemStack itemStack, ServerPlayer context) {
         return this.clientItem;
     }
 
-    @Override
-    public @Nullable Identifier getPolymerItemModel(ItemStack stack, PacketContext context, HolderLookup.Provider l) {
-        return null;
-    }
 }

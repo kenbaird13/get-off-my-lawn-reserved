@@ -3,9 +3,7 @@ package draylar.goml.ui;
 import draylar.goml.registry.GOMLTextures;
 import eu.pb4.sgui.api.elements.GuiElement;
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
-import eu.pb4.sgui.api.elements.GuiElementBuilderCreator;
-import eu.pb4.sgui.api.elements.SimpleGuiElement;
-import eu.pb4.sgui.api.gui.SimpleGui;
+import eu.pb4.sgui.api.elements.GuiElementBuilderInterface;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
@@ -23,11 +21,46 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 @ApiStatus.Internal
-public abstract class PagedGui extends SimpleGui {
+public abstract class PagedGui extends CloseAwareGui {
     public static final int PAGE_SIZE = 9 * 4;
     protected final Runnable closeCallback;
     protected int page = 0;
     public boolean ignoreCloseCallback;
+    protected draylar.goml.api.Claim boundClaim;
+    private long claimRevision;
+    private boolean managementAccess;
+
+    public void bindClaim(draylar.goml.api.Claim claim, boolean management) {
+        this.boundClaim = claim;
+        this.claimRevision = claim.accessRevision();
+        this.managementAccess = management;
+    }
+
+    public boolean hasClaimAccess() {
+        return boundClaim == null || (!boundClaim.isDestroyed() && boundClaim.accessRevision() == claimRevision
+                && player.level() == boundClaim.getWorldInstance(player.level().getServer())
+                && (!managementAccess || boundClaim.canManage(player)));
+    }
+
+    @Override public boolean open() {
+        if (!hasClaimAccess()) return false;
+        if (boundClaim != null) boundClaim.registerMenu(this);
+        return super.open();
+    }
+
+    @Override public void onClose() {
+        if (boundClaim != null) boundClaim.unregisterMenu(this);
+        super.onClose();
+    }
+
+    @Override public boolean onAnyClick(int index, eu.pb4.sgui.api.ClickType type, net.minecraft.world.inventory.ClickType action) {
+        if (!hasClaimAccess()) { close(false); return false; }
+        return super.onAnyClick(index, type, action);
+    }
+
+    @Override public void onTick() {
+        if (!hasClaimAccess()) close(false);
+    }
 
     public PagedGui(ServerPlayer player, @Nullable Runnable closeCallback) {
         super(MenuType.GENERIC_9x5, player, false);
@@ -36,13 +69,14 @@ public abstract class PagedGui extends SimpleGui {
 
 
     public void refreshOpen() {
+        if (!hasClaimAccess()) return;
         this.updateDisplay();
         this.open();
     }
 
     @Override
     public void onManualClose() {
-        if (this.closeCallback != null && !ignoreCloseCallback) {
+        if (this.closeCallback != null && !ignoreCloseCallback && hasClaimAccess()) {
             this.closeCallback.run();
         }
     }
@@ -78,7 +112,7 @@ public abstract class PagedGui extends SimpleGui {
             if (element.element() != null) {
                 this.setSlot(i, element.element());
             } else if (element.slot() != null) {
-                this.setSlot(i, element.slot());
+                this.setSlotRedirect(i, element.slot());
             }
         }
 
@@ -92,7 +126,7 @@ public abstract class PagedGui extends SimpleGui {
             if (navElement.elementSupplier != null) {
                 this.setSlot(i + PAGE_SIZE, navElement.element());
             } else if (navElement.slot != null) {
-                this.setSlot(i + PAGE_SIZE, navElement.slot);
+                this.setSlotRedirect(i + PAGE_SIZE, navElement.slot);
             }
         }
     }
@@ -122,19 +156,19 @@ public abstract class PagedGui extends SimpleGui {
         };
     }
 
-    public record DisplayElement(@Nullable Supplier<GuiElement> elementSupplier, @Nullable Slot slot) {
-        private static final DisplayElement EMPTY = DisplayElement.of(new SimpleGuiElement(ItemStack.EMPTY, GuiElement.EMPTY_CALLBACK));
+    public record DisplayElement(@Nullable Supplier<eu.pb4.sgui.api.elements.GuiElementInterface> elementSupplier, @Nullable Slot slot) {
+        private static final DisplayElement EMPTY = DisplayElement.of(new GuiElement(ItemStack.EMPTY, GuiElement.EMPTY_CALLBACK));
         private static final DisplayElement FILLER = DisplayElement.of(
-                new GuiElementBuilder(Items.STAINED_GLASS_PANE.white())
+                new GuiElementBuilder(Items.WHITE_STAINED_GLASS_PANE)
                         .setName(Component.empty())
                         .hideTooltip()
         );
 
-        public static DisplayElement of(GuiElement element) {
+        public static DisplayElement of(eu.pb4.sgui.api.elements.GuiElementInterface element) {
             return new DisplayElement(() -> element, null);
         }
 
-        public static DisplayElement of(GuiElementBuilderCreator<?> element) {
+        public static DisplayElement of(GuiElementBuilderInterface<?> element) {
             return new DisplayElement(element::build, null);
         }
 
@@ -148,7 +182,7 @@ public abstract class PagedGui extends SimpleGui {
                         new GuiElementBuilder(Items.PLAYER_HEAD)
                                 .setName(Component.translatable("text.goml.gui.next_page").withStyle(ChatFormatting.WHITE))
                                 .hideDefaultTooltip()
-                                .setProfileSkinTexture(GOMLTextures.GUI_NEXT_PAGE)
+                                .setSkullOwner(GOMLTextures.GUI_NEXT_PAGE)
                                 .setCallback(() -> {
                                     playClickSound(gui.player);
                                     gui.nextPage();
@@ -159,7 +193,7 @@ public abstract class PagedGui extends SimpleGui {
                         new GuiElementBuilder(Items.PLAYER_HEAD)
                                 .setName(Component.translatable("text.goml.gui.next_page").withStyle(ChatFormatting.DARK_GRAY))
                                 .hideDefaultTooltip()
-                                .setProfileSkinTexture(GOMLTextures.GUI_NEXT_PAGE_BLOCKED)
+                                .setSkullOwner(GOMLTextures.GUI_NEXT_PAGE_BLOCKED)
                 );
             }
         }
@@ -170,7 +204,7 @@ public abstract class PagedGui extends SimpleGui {
                         new GuiElementBuilder(Items.PLAYER_HEAD)
                                 .setName(Component.translatable("text.goml.gui.previous_page").withStyle(ChatFormatting.WHITE))
                                 .hideDefaultTooltip()
-                                .setProfileSkinTexture(GOMLTextures.GUI_PREVIOUS_PAGE)
+                                .setSkullOwner(GOMLTextures.GUI_PREVIOUS_PAGE)
                                 .setCallback(() -> {
                                     playClickSound(gui.player);
                                     gui.previousPage();
@@ -181,7 +215,7 @@ public abstract class PagedGui extends SimpleGui {
                         new GuiElementBuilder(Items.PLAYER_HEAD)
                                 .setName(Component.translatable("text.goml.gui.previous_page").withStyle(ChatFormatting.DARK_GRAY))
                                 .hideDefaultTooltip()
-                                .setProfileSkinTexture(GOMLTextures.GUI_PREVIOUS_PAGE_BLOCKED)
+                                .setSkullOwner(GOMLTextures.GUI_PREVIOUS_PAGE_BLOCKED)
                 );
             }
         }
@@ -193,16 +227,16 @@ public abstract class PagedGui extends SimpleGui {
         public static DisplayElement empty() {
             return EMPTY;
         }
-        
-        
-        public GuiElement element() {
+
+
+        public eu.pb4.sgui.api.elements.GuiElementInterface element() {
             return Objects.requireNonNull(this.elementSupplier).get();
         }
     }
 
     public static final void playClickSound(ServerPlayer player) {
         player.connection.send(new ClientboundSoundEntityPacket(
-                SoundEvents.UI_BUTTON_CLICK, SoundSource.UI, player,1, 1, player.getRandom().nextLong()
+                SoundEvents.UI_BUTTON_CLICK, SoundSource.MASTER, player,1, 1, player.getRandom().nextLong()
         ));
     }
 }
